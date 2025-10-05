@@ -9,12 +9,19 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./config.yml:/app/config.yml
       # add daemon volume to be done soon
+    networks:
+      - defense_container
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).getcode()==200 else sys.exit(1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
   
   falco:
     image: falcosecurity/falco:latest
     container_name: falco
     privileged: true
-    network_mode: host
     volumes: 
       - /var/run/docker.sock:/host/var/run/docker.sock:ro
       - /dev:/host/dev
@@ -24,9 +31,22 @@ services:
       - /usr:/host/usr:ro
       - /etc:/host/etc:ro
       - /var/log/falco_events.log:/var/log/falco_events.log
-      - ./falco.yaml:/etc/falco/falco.yaml
+      #- ./falco.yaml:/etc/falco/falco.yaml
       # Optional: Mount a custom rules directory
       # - ./falco_rules:/etc/falco/rules.d
     environment:
       - FALCO_JSON_OUTPUT=true
+    command: > 
+      falco -o json_output=true
+      -o http_output.enabled=true
+      -o http_output.url=http://daemon-defense:8080/api/falco-alert
+    depends_on:
+      daemon-defense:
+        condition: service_healthy
+    networks:
+      - defense_container
+
+networks:
+  defense_container:
+    driver: bridge
       
