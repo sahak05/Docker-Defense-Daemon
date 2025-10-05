@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  daemon-defense:
+    build: ./daemon
+    ports: 
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config.yml:/app/config.yml
+      # add daemon volume to be done soon
+  
+  falco:
+    image: falcosecurity/falco:latest
+    container_name: falco
+    privileged: true
+    network_mode: host
+    volumes: 
+      - /var/run/docker.sock:/host/var/run/docker.sock:ro
+      - /dev:/host/dev
+      - /proc:/host/proc:ro
+      - /boot:/host/boot:ro
+      - /lib/modules:/host/lib/modules:ro
+      - /usr:/host/usr:ro
+      - /etc:/host/etc:ro
+      - /var/log/falco_events.log:/var/log/falco_events.log
+      - ./falco.yaml:/etc/falco/falco.yaml
+      # Optional: Mount a custom rules directory
+      # - ./falco_rules:/etc/falco/rules.d
+    environment:
+      - FALCO_JSON_OUTPUT=true
+      
