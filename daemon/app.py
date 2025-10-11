@@ -5,6 +5,8 @@ import subprocess
 import json
 import logging, sys
 
+from events import docker_thread
+
 logging.basicConfig(
     level=logging.INFO,
     stream=sys.stdout,
@@ -53,5 +55,5 @@ def falco_alert():
     return jsonify({"status": "received"}), 200
 
 if __name__ == "__main__":
-    import threading
+    docker_thread()
     app.run(host="0.0.0.0", port=8080, debug=True)

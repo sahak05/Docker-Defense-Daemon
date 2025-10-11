@@ -14,7 +14,17 @@ Also connecting the falco output to the daemon is setup but not finish. This can
 ### Testing connectivity from falco to daemon
 - Run a light container and open a shell, Falco has basic rule when it warns when a container spawns a shell => `docker run --rm -itd alpine sh`
 - You should see in the daemon log a JSOn line with the informations.
-
+### Container with Full risk enabled to test security app logs those risks 
+docker run -d \
+  --name test_all_risks \
+  --privileged \
+  --user 0 \
+  --cap-add=SYS_ADMIN \
+  --cap-add=SYS_PTRACE \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /:/hostroot:ro \
+  -v /etc:/etc_host:ro \
+  alpine sleep 3600
 ## Good to know
 - How docker network works: https://www.youtube.com/watch?v=bKFMS5C4CG0&list=WL&index=2&t=17s
 - Docker compose quick start: https://docs.docker.com/compose/gettingstarted/
@@ -23,5 +33,6 @@ Also connecting the falco output to the daemon is setup but not finish. This can
 - Falco documentation: https://falco.org/docs/setup/container/
 - Flask tutorial: https://www.geeksforgeeks.org/python/flask-tutorial/
 - Docker SDK: https://docker-py.readthedocs.io/en/stable/
-
+- Threading in Python: https://www.geeksforgeeks.org/python/multithreading-python-set-1/
+- Threading (YouTube): https://www.youtube.com/watch?v=A_Z1lgZLSNc
   

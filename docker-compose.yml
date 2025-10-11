@@ -13,7 +13,7 @@ services:
       - defense_container
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).getcode()==200 else sys.exit(1)"]
-      interval: 5s
+      interval: 120s # should be 5s when work is finalizing
       timeout: 3s
       retries: 10
       start_period: 10s
