@@ -37,7 +37,7 @@ def analyze_container(cid, metadata_inspection, image, action):
     # link to attackwith the Trojan image - Detects vulnerabilities and malware inside the container image before or during deployment
     
     persist_alert(risks_mapping, "/app/alerts/alerts.jsonl")      
-    print(f"Result from the inspect on container {cid} \n {json.dumps(risks_mapping['metadata'], indent=2)} \n")
+    # print(f"Result from the inspect on container {cid} \n {json.dumps(risks_mapping['metadata'], indent=2)} \n")
     # Let's think about how memory is used inisde a container
     if risks_mapping["risks"]:
         print(f"[!] Risks found for container {cid}:")
