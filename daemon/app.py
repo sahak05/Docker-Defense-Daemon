@@ -4,6 +4,8 @@ import docker
 import subprocess
 import json
 import logging, sys
+import os
+os.environ["PYTHONUNBUFFERED"] = "1"
 
 from events import docker_thread
 
@@ -56,4 +58,4 @@ def falco_alert():
 
 if __name__ == "__main__":
     docker_thread()
-    app.run(host="0.0.0.0", port=8080, debug=True)
+    app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
