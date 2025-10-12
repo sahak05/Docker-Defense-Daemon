@@ -1,4 +1,6 @@
-def retrieve_all_risks(metadata):
+import os, json, datetime
+
+def retrieve_all_risks(cid, metadata, image, action):
     
     DANGEROUS_CAPS = {"SYS_ADMIN", "SYS_PTRACE", "NET_ADMIN"}
     SENSITIVE_PATHS = ["/", "/etc", "root", "/var/run", "/boot", "/dev", "/etc", "/lib", "/proc", "/sys", "/usr"]
@@ -6,6 +8,7 @@ def retrieve_all_risks(metadata):
     risks = []
     
     c_creation_time = metadata.get("Created")
+    c_container_id =  metadata.get("Id")
     c_volumes_mounted = metadata.get("HostConfig", {}).get("Binds", [])
     c_capAdd = metadata.get("HostConfig", {}).get("CapAdd", [])
     c_capDrop = metadata.get("HostConfig", {}).get("CapDrop")
@@ -16,15 +19,16 @@ def retrieve_all_risks(metadata):
     c_env = metadata.get("Config", {}).get("Env")
     
     container_json = {
-        "Created": c_creation_time,
-        "VolumesMounted": c_volumes_mounted,
-        "CapabilitiesAdded": c_capAdd,
-        "CapabilitiesDropped": c_capDrop,
-        "Privileged": c_privileged_flag,
-        "User": c_user,
-        "SecurityOptions": c_securityOpt,
-        "Networks": c_networks,
-        "EnvironmentVariables": c_env
+        "container_id": c_container_id,
+        "timestamp": c_creation_time,
+        "volumesMounted": c_volumes_mounted,
+        "capabilitiesAdded": c_capAdd,
+        "capabilitiesDropped": c_capDrop,
+        "privileged": c_privileged_flag,
+        "user": c_user,
+        "securityOptions": c_securityOpt,
+        "networks": c_networks,
+        "environmentVariables": c_env
     }
     
     if c_privileged_flag == True:
@@ -66,7 +70,16 @@ def retrieve_all_risks(metadata):
                 break
     
     return {
+        "id": cid,
+        "image": image, 
+        "action": action,
         "metadata": container_json,
-        "risks": risks
+        "risks": risks,
+        "log_time": datetime.datetime.utcnow().isoformat() + 'Z'
     }
-    
+   
+   
+def persist_alert(alert_json, file):
+    os.makedirs(os.path.dirname(file), exist_ok=True)
+    with open(file, "a") as f:
+        f.write(json.dumps(alert_json) + "\n")  

@@ -16,6 +16,12 @@ Also connecting the falco output to the daemon is setup but not finish. This can
 - You should see in the daemon log a JSOn line with the informations.
 ### Container with Full risk enabled to test security app logs those risks 
 ```
+ docker run -it --rm --privileged -v /:/hostroot:ro alpine sh
+```
+exit the container after.
+
+
+```
 docker run -d \
   --name test_all_risks \
   --privileged \

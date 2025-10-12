@@ -8,6 +8,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./config.yml:/app/config.yml
+      - ./alerts:/app/alerts
       # add daemon volume to be done soon
     networks:
       - defense_container
