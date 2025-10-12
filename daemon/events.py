@@ -33,6 +33,9 @@ def docker_event_listener():
 def analyze_container(cid, metadata_inspection, image, action): 
     risks_mapping = retrieve_all_risks(cid, metadata_inspection, image, action)
     
+    # TODO: Gureet - Trivy scan based on the image name to retrieve vulnerabilities list if found
+    # link to attackwith the Trojan image - Detects vulnerabilities and malware inside the container image before or during deployment
+    
     persist_alert(risks_mapping, "/app/alerts/alerts.jsonl")      
     print(f"Result from the inspect on container {cid} \n {json.dumps(risks_mapping['metadata'], indent=2)} \n")
     # Let's think about how memory is used inisde a container
