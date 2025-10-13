@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "name": "docker-defense-daemon",
+  "version": "0.0.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:ui": "yarn workspace ui dev",
+    "build:ui": "yarn workspace ui build",
+    "start:ui": "yarn workspace ui preview"
+  }
+}
