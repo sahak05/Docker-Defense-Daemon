@@ -10,10 +10,15 @@ import {
   StopCircle,
   CheckCircle2,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "./uiLibraries/card";
-import { Button } from "./uiLibraries/button";
-import { Progress } from "./uiLibraries/progress";
-import { Badge } from "./uiLibraries/badge";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../components/uiLibraries/card";
+import { Button } from "../components/uiLibraries/button";
+import { Progress } from "../components/uiLibraries/progress";
+import { Badge } from "../components/uiLibraries/badge";
 import { mockSystemHealth, mockDaemonInfo } from "../utils/mockData2";
 import { toast } from "sonner";
 

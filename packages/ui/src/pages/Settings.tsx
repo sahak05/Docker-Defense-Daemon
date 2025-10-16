@@ -14,16 +14,17 @@ import {
   CardHeader,
   CardTitle,
   CardDescription,
-} from "./uiLibraries/card";
-import { Button } from "./uiLibraries/button";
-import { Input } from "./uiLibraries/input";
-import { Label } from "./uiLibraries/label";
-import { Switch } from "./uiLibraries/switch";
-import { Separator } from "./uiLibraries/separator";
+} from "../components/uiLibraries/card";
+import { Button } from "../components/uiLibraries/button";
+import { Input } from "../components/uiLibraries/input";
+import { Label } from "../components/uiLibraries/label";
+import { Switch } from "../components/uiLibraries/switch";
+import { Separator } from "../components/uiLibraries/separator";
 // Select component intentionally not used here yet
-import { Slider } from "./uiLibraries/slider";
+import { Slider } from "../components/uiLibraries/slider";
 import { toast } from "sonner";
 import { useTheme } from "../hooks/useTheme";
+import { getColor } from "../assets/styles/color";
 
 export const Settings: React.FC = () => {
   useTheme();
@@ -146,7 +147,10 @@ export const Settings: React.FC = () => {
                     variant="outline"
                     tokenStyles
                   >
-                    <p className="text-sm text-muted-foreground">
+                    <p
+                      className="text-sm"
+                      style={{ color: getColor("neutral", 200) }}
+                    >
                       Alert when containers run with --privileged flag
                     </p>
                   </Button>

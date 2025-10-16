@@ -9,10 +9,10 @@ import {
   Eye,
   Download,
 } from "lucide-react";
-import { Card, CardContent } from "./uiLibraries/card";
-import { Input } from "./uiLibraries/input";
-import { Button } from "./uiLibraries/button";
-import { Badge } from "./uiLibraries/badge";
+import { Card, CardContent } from "../components/uiLibraries/card";
+import { Input } from "../components/uiLibraries/input";
+import { Button } from "../components/uiLibraries/button";
+import { Badge } from "../components/uiLibraries/badge";
 import {
   Table,
   TableBody,
@@ -20,22 +20,22 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "./uiLibraries/table";
+} from "../components/uiLibraries/table";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "./uiLibraries/dialog";
+} from "../components/uiLibraries/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "./uiLibraries/select";
-import { Progress } from "./uiLibraries/progress";
+} from "../components/uiLibraries/select";
+import { Progress } from "../components/uiLibraries/progress";
 import {
   mockContainers,
   type Container as ContainerType,

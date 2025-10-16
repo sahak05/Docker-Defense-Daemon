@@ -1,15 +1,15 @@
 import { useState } from "react";
 
 /* App-level components (from this package) */
-import { DashboardLayout } from "./components/DashboardLayout";
-import { ContainersPage } from "./components/ContainersPage";
-import { AlertsCenter } from "./components/AlertsCenter";
-import { EventLogs } from "./components/EventLogs";
-import { SystemStatus } from "./components/SystemStatus";
-import { Settings } from "./components/Settings";
+import { DashboardLayout } from "./pages/DashboardLayout";
+import { ContainersPage } from "./pages/ContainersPage";
+import { AlertsCenter } from "./pages/AlertsCenter";
+import { EventLogs } from "./pages/EventLogs";
+import { SystemStatus } from "./pages/SystemStatus";
+import { Settings } from "./pages/Settings";
 
 /* Dashboard component kept in the ui package */
-import Dashboard from "../../ui/src/pages/dashboard/Dashboard";
+import Dashboard from "./pages/Dashboard";
 import { Toaster } from "./components/uiLibraries/sonner";
 import { useTheme } from "./hooks/useTheme";
 

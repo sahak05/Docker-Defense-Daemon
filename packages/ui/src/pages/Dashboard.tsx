@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useTheme } from "../../hooks/useTheme";
+import { useTheme } from "../hooks/useTheme";
 import {
   Activity,
   AlertTriangle,
@@ -15,13 +15,13 @@ import {
   Sun,
 } from "lucide-react";
 import styles from "./styles/dashboard.module.css";
-import type { DashboardData } from "../../types/dashboard";
+import type { DashboardData } from "../types/dashboard";
 import colors, {
   getColor,
   getSeverityColor,
   getStatusColor,
-} from "../../assets/styles/color";
-import { mockDashboardData } from "../../utils/mockData";
+} from "../assets/styles/color";
+import { mockDashboardData } from "../utils/mockData";
 
 interface DashboardProps {
   useMockData?: boolean;

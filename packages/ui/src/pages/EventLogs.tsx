@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { ScrollText, Search, Download, RefreshCw } from "lucide-react";
-import { Card, CardContent } from "./uiLibraries/card";
-import { Input } from "./uiLibraries/input";
-import { Button } from "./uiLibraries/button";
-import { Badge } from "./uiLibraries/badge";
+import { Card, CardContent } from "../components/uiLibraries/card";
+import { Input } from "../components/uiLibraries/input";
+import { Button } from "../components/uiLibraries/button";
+import { Badge } from "../components/uiLibraries/badge";
 import {
   Table,
   TableBody,
@@ -11,14 +11,14 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "./uiLibraries/table";
+} from "../components/uiLibraries/table";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "./uiLibraries/select";
+} from "../components/uiLibraries/select";
 import { mockEventLogs } from "../utils/mockData2";
 import { toast } from "sonner";
 import colors, { getColor } from "../assets/styles/color";

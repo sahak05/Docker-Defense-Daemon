@@ -8,10 +8,10 @@ import {
   Eye,
   Download,
 } from "lucide-react";
-import { Card, CardContent } from "./uiLibraries/card";
-import { Input } from "./uiLibraries/input";
-import { Button } from "./uiLibraries/button";
-import { Badge } from "./uiLibraries/badge";
+import { Card, CardContent } from "../components/uiLibraries/card";
+import { Input } from "../components/uiLibraries/input";
+import { Button } from "../components/uiLibraries/button";
+import { Badge } from "../components/uiLibraries/badge";
 import {
   Table,
   TableBody,
@@ -19,7 +19,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "./uiLibraries/table";
+} from "../components/uiLibraries/table";
 import {
   Dialog,
   DialogContent,
@@ -27,14 +27,14 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from "./uiLibraries/dialog";
+} from "../components/uiLibraries/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "./uiLibraries/select";
+} from "../components/uiLibraries/select";
 import { mockAlerts } from "../utils/mockData2";
 import type { Alert } from "../utils/mockData2";
 import { toast } from "sonner";
