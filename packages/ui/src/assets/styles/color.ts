@@ -139,7 +139,7 @@ export const colors = {
     stopped: "#ef4444",
     paused: "#f59e0b",
     restarting: "#3b82f6",
-    exited: "#737373",
+    exited: "#7373735c",
     dead: "#7f1d1d",
   },
 
@@ -148,7 +148,7 @@ export const colors = {
     critical: "#dc2626",
     high: "#f59e0b",
     medium: "#3b82f6",
-    low: "#737373",
+    low: "#7373735c",
     info: "#0ea5e9",
   },
 } as const;
@@ -157,15 +157,22 @@ export const colors = {
 export type ColorShade = keyof typeof colors.primary;
 export type ColorCategory = keyof typeof colors;
 
-// Theme-aware color getter
+// Category-specific shade unions
+export type ShadeWithNumeric = keyof typeof colors.primary; // '50'|'100'|...|'900'
+export type StatusShade = keyof typeof colors.status; // 'running'|'stopped'|...
+export type SeverityShade = keyof typeof colors.severity; // 'critical'|'high'|...
+
+// Theme-aware color getter (single implementation)
 export const getColor = (
   category: keyof typeof colors,
-  shade?: ColorShade | keyof typeof colors.status,
+  shade?: string | number,
   isDark = false
 ): string => {
   const colorCategory = colors[category as keyof typeof colors];
 
-  if (!shade) {
+  const shadeKey = typeof shade !== "undefined" ? String(shade) : undefined;
+
+  if (!shadeKey) {
     // Handle special cases without shade
     if (category === "border") {
       return isDark ? colors.border.dark : colors.border.light;
@@ -175,11 +182,40 @@ export const getColor = (
       : "#000000";
   }
 
-  if (typeof colorCategory === "object" && shade in colorCategory) {
-    return (colorCategory as any)[shade];
+  if (typeof colorCategory === "object" && shadeKey in colorCategory) {
+    return (colorCategory as any)[shadeKey];
   }
 
   return "#000000";
 };
 
+// Convenience helpers for common lookups with clear intent
+export const getSeverityColor = (
+  severity: SeverityShade,
+  isDark = false
+): string => getColor("severity", severity, isDark);
+
+export const getStatusColor = (status: StatusShade, isDark = false): string =>
+  getColor("status", status, isDark);
+
 export default colors;
+
+// Helper to read nested background tokens: 'primary'|'secondary'|'tertiary'
+export const getBackgroundColor = (
+  layer:
+    | keyof typeof colors.background.light
+    | keyof typeof colors.background.dark,
+  isDark = false
+): string => {
+  const mode = isDark ? colors.background.dark : colors.background.light;
+  return (mode as any)[layer] ?? "transparent";
+};
+
+// Helper to read nested text tokens: 'primary'|'secondary'|'tertiary'|'disabled'
+export const getTextColor = (
+  layer: keyof typeof colors.text.light | keyof typeof colors.text.dark,
+  isDark = false
+): string => {
+  const mode = isDark ? colors.text.dark : colors.text.light;
+  return (mode as any)[layer] ?? "inherit";
+};

@@ -6,7 +6,7 @@
   min-height: 100vh;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
-
+/* 
 .dashboard.light {
   background-color: #f9fafb;
   color: #171717;
@@ -18,7 +18,7 @@
 }
 .dashboard {
   transition: background-color 0.3s ease, color 0.3s ease;
-}
+} */
 
 /* .dashboard.light {
   background-color: #ffffff;
@@ -70,7 +70,8 @@
   margin-top: 5px;
 }
 
-.dark .daemonStatus {
+/* target global .dark class added on the html/body/documentElement */
+:global(.dark) .daemonStatus {
   background-color: #262626;
 }
 
@@ -120,7 +121,8 @@
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.dark .card {
+/* match when a global .dark class exists */
+:global(.dark) .card {
   background-color: #171717;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
@@ -130,7 +132,7 @@
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
-.dark .card:hover {
+:global(.dark) .card:hover {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
 }
 
@@ -186,7 +188,7 @@
   color: #525252;
 }
 
-.dark .subStat {
+:global(.dark) .subStat {
   color: #d4d4d4;
 }
 
@@ -212,7 +214,7 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.dark .section {
+:global(.dark) .section {
   background-color: #171717;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
@@ -263,7 +265,7 @@
   overflow: hidden;
 }
 
-.dark .alertItem {
+:global(.dark) .alertItem {
   background-color: #262626;
 }
 
@@ -271,7 +273,7 @@
   background-color: #f3f4f6;
 }
 
-.dark .alertItem:hover {
+:global(.dark) .alertItem:hover {
   background-color: #404040;
 }
 
@@ -302,7 +304,7 @@
   line-height: 1.5;
 }
 
-.dark .alertContent p {
+:global(.dark) .alertContent p {
   color: #a3a3a3;
 }
 
@@ -329,7 +331,7 @@
   border-radius: 4px;
 }
 
-.dark .containerTag {
+:global(.dark) .containerTag {
   background-color: #404040;
   color: #d4d4d4;
 }
@@ -376,7 +378,7 @@
   transition: background-color 0.2s ease;
 }
 
-.dark .containerItem {
+:global(.dark) .containerItem {
   background-color: #262626;
 }
 
@@ -384,7 +386,7 @@
   background-color: #f3f4f6;
 }
 
-.dark .containerItem:hover {
+:global(.dark) .containerItem:hover {
   background-color: #404040;
 }
 
@@ -408,7 +410,7 @@
   font-family: "JetBrains Mono", monospace;
 }
 
-.dark .containerInfo p {
+:global(.dark) .containerInfo p {
   color: #a3a3a3;
 }
 
@@ -433,7 +435,7 @@
   letter-spacing: 0.05em;
 }
 
-.dark .metricLabel {
+:global(.dark) .metricLabel {
   color: #a3a3a3;
 }
 
@@ -444,7 +446,7 @@
   overflow: hidden;
 }
 
-.dark .progressBar {
+:global(.dark) .progressBar {
   background-color: #404040;
 }
 
@@ -468,7 +470,7 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.dark .activitySection {
+:global(.dark) .activitySection {
   background-color: #171717;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
@@ -498,7 +500,7 @@
   z-index: 1;
 }
 
-.dark .activityDot {
+:global(.dark) .activityDot {
   border-color: #171717;
 }
 
@@ -511,7 +513,7 @@
   background-color: #e5e5e5;
 }
 
-.dark .activityLine {
+:global(.dark) .activityLine {
   background-color: #404040;
 }
 

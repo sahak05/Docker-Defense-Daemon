@@ -25,7 +25,7 @@ export interface Alert {
   containerId?: string;
   containerName?: string;
   status: "new" | "acknowledged" | "resolved";
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface DaemonStatus {
