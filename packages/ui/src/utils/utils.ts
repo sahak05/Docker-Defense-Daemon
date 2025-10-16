@@ -94,7 +94,7 @@ export function generateId(): string {
 /**
  * Debounce function
  */
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
@@ -103,7 +103,8 @@ export function debounce<T extends (...args: any[]) => any>(
   return function executedFunction(...args: Parameters<T>) {
     const later = () => {
       timeout = null;
-      func(...args);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      (func as (...a: Parameters<T>) => unknown)(...args);
     };
 
     if (timeout) clearTimeout(timeout);
@@ -114,7 +115,7 @@ export function debounce<T extends (...args: any[]) => any>(
 /**
  * Throttle function
  */
-export function throttle<T extends (...args: any[]) => any>(
+export function throttle<T extends (...args: unknown[]) => unknown>(
   func: T,
   limit: number
 ): (...args: Parameters<T>) => void {
@@ -122,7 +123,8 @@ export function throttle<T extends (...args: any[]) => any>(
 
   return function executedFunction(...args: Parameters<T>) {
     if (!inThrottle) {
-      func(...args);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      (func as (...a: Parameters<T>) => unknown)(...args);
       inThrottle = true;
       setTimeout(() => (inThrottle = false), limit);
     }

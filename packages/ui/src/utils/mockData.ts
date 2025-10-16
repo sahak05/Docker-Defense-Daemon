@@ -269,7 +269,7 @@ export function generateRandomDashboardData(): DashboardData {
   data.summary.systemMetrics.cpu.usage = Math.random() * 100;
   data.summary.systemMetrics.memory.percentage = Math.random() * 100;
 
-  data.topContainers = data.topContainers.map((container: any) => ({
+  data.topContainers = data.topContainers.map((container) => ({
     ...container,
     cpu: Math.random() * 100,
     memory: container.memory + (Math.random() - 0.5) * 100,

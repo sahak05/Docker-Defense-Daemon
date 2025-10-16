@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useTheme } from "../../hooks/useTheme";
 import {
   Activity,
   AlertTriangle,
@@ -14,21 +15,33 @@ import {
   Sun,
 } from "lucide-react";
 import styles from "./styles/dashboard.module.css";
-import type { Alert, DashboardData } from "../../types/dashboard";
-import colors from "../../assets/styles/color";
+import type { DashboardData } from "../../types/dashboard";
+import colors, {
+  getColor,
+  getSeverityColor,
+  getStatusColor,
+} from "../../assets/styles/color";
 import { mockDashboardData } from "../../utils/mockData";
 
 interface DashboardProps {
-  isDarkMode?: boolean;
   useMockData?: boolean;
+  isDarkMode?: boolean; // accept optional prop from parent App
   onToggleDarkMode?: () => void;
+  onNavigate?: (page: string, itemId?: string) => void; // added navigation prop
 }
 
 const Dashboard: React.FC<DashboardProps> = ({
-  isDarkMode = false,
   useMockData = true,
+  isDarkMode: propIsDarkMode,
   onToggleDarkMode,
+  onNavigate,
 }) => {
+  const themeHook = useTheme();
+  // effectiveDark prefers prop, falls back to theme hook
+  const effectiveDark =
+    typeof propIsDarkMode === "boolean" ? propIsDarkMode : themeHook.isDarkMode;
+  const toggleTheme = onToggleDarkMode ?? themeHook.toggle;
+
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(
     null
   );
@@ -95,27 +108,31 @@ const Dashboard: React.FC<DashboardProps> = ({
     };
   }, [useMockData]);
 
-  const getSeverityColor = (severity: Alert["severity"]): string => {
-    const severityColors: Record<Alert["severity"], string> = {
-      critical: colors.severity.critical,
-      high: colors.severity.high,
-      medium: colors.severity.medium,
-      low: colors.severity.low,
-      info: colors.severity.info,
-    };
-
-    return severityColors[severity] || colors.neutral[500];
-  };
+  // Use shared `getSeverityColor` from the color helpers (imported above)
 
   const getStatusIcon = (status: string): React.ReactElement => {
     const statusIcons: Record<string, React.ReactElement> = {
-      running: <CheckCircle2 size={20} color={colors.status.running} />,
-      stopped: <XCircle size={20} color={colors.status.stopped} />,
-      paused: <PauseCircle size={20} color={colors.status.paused} />,
+      running: (
+        <CheckCircle2
+          size={20}
+          color={getStatusColor("running", effectiveDark)}
+        />
+      ),
+      stopped: (
+        <XCircle size={20} color={getStatusColor("stopped", effectiveDark)} />
+      ),
+      paused: (
+        <PauseCircle
+          size={20}
+          color={getStatusColor("paused", effectiveDark)}
+        />
+      ),
     };
 
     return (
-      statusIcons[status] || <Activity size={20} color={colors.neutral[500]} />
+      statusIcons[status] || (
+        <Activity size={20} color={getColor("neutral", "500", effectiveDark)} />
+      )
     );
   };
 
@@ -152,13 +169,16 @@ const Dashboard: React.FC<DashboardProps> = ({
   if (!dashboardData) {
     return (
       <div className={styles.errorContainer}>
-        <AlertTriangle size={48} color={colors.error[500]} />
+        <AlertTriangle
+          size={48}
+          color={getColor("error", "500", effectiveDark)}
+        />
         <h2>Failed to Load Dashboard</h2>
         <p>{error || "No data available"}</p>
         <p
           style={{
             fontSize: "0.875rem",
-            color: colors.neutral[500],
+            color: getColor("neutral", "500", effectiveDark),
             marginTop: "1rem",
           }}
         >
@@ -175,7 +195,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div
       className={`${styles.dashboard} ${
-        isDarkMode ? styles.dark : styles.light
+        effectiveDark ? styles.dark : styles.light
       }`}
     >
       {/* Development Mode Indicator */}
@@ -184,9 +204,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           style={{
             position: "fixed",
             top: "1rem",
-            right: "1rem",
-            backgroundColor: colors.warning[100],
-            color: colors.warning[900],
+            right: "5rem",
+            backgroundColor: getColor("warning", "100", effectiveDark),
+            color: getColor("warning", "900", effectiveDark),
             padding: "0.5rem 1rem",
             borderRadius: "0.5rem",
             fontSize: "0.75rem",
@@ -201,11 +221,6 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       {/* Header */}
       <header className={styles.header}>
-        <div>
-          <h1 className={styles.title}>Dashboard</h1>
-          <p className={styles.subtitle}>Docker Defense Daemon Overview</p>
-        </div>
-
         <div className={styles.headerActions}>
           {/* Daemon Status */}
           <div className={styles.daemonStatus}>
@@ -219,7 +234,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
           {/* Dark Mode Toggle */}
           <button
-            onClick={onToggleDarkMode}
+            onClick={toggleTheme}
             className={styles.themeToggle}
             aria-label="Toggle theme"
             style={{
@@ -229,10 +244,16 @@ const Dashboard: React.FC<DashboardProps> = ({
               marginLeft: "1rem",
             }}
           >
-            {isDarkMode ? (
-              <Sun size={22} color={colors.warning[700]} />
+            {effectiveDark ? (
+              <Sun
+                size={22}
+                color={getColor("warning", "700", effectiveDark)}
+              />
             ) : (
-              <Moon size={22} color={colors.neutral[700]} />
+              <Moon
+                size={22}
+                color={getColor("neutral", "700", effectiveDark)}
+              />
             )}
           </button>
         </div>
@@ -245,9 +266,14 @@ const Dashboard: React.FC<DashboardProps> = ({
           <div className={styles.cardHeader}>
             <div
               className={styles.cardIcon}
-              style={{ backgroundColor: colors.primary[100] }}
+              style={{
+                backgroundColor: getColor("primary", "100", effectiveDark),
+              }}
             >
-              <Box size={24} color={colors.primary[600]} />
+              <Box
+                size={24}
+                color={getColor("primary", "600", effectiveDark)}
+              />
             </div>
             <h3>Containers</h3>
           </div>
@@ -271,9 +297,14 @@ const Dashboard: React.FC<DashboardProps> = ({
           <div className={styles.cardHeader}>
             <div
               className={styles.cardIcon}
-              style={{ backgroundColor: colors.warning[100] }}
+              style={{
+                backgroundColor: getColor("warning", "100", effectiveDark),
+              }}
             >
-              <AlertTriangle size={24} color={colors.warning[600]} />
+              <AlertTriangle
+                size={24}
+                color={getColor("warning", "600", effectiveDark)}
+              />
             </div>
             <h3>Alerts</h3>
           </div>
@@ -283,14 +314,14 @@ const Dashboard: React.FC<DashboardProps> = ({
               <div className={styles.subStat}>
                 <div
                   className={styles.severityDot}
-                  style={{ backgroundColor: colors.severity.critical }}
+                  style={{ backgroundColor: getSeverityColor("critical") }}
                 ></div>
                 <span>{summary.alerts.critical} critical</span>
               </div>
               <div className={styles.subStat}>
                 <div
                   className={styles.severityDot}
-                  style={{ backgroundColor: colors.severity.high }}
+                  style={{ backgroundColor: getSeverityColor("high") }}
                 ></div>
                 <span>{summary.alerts.high} high</span>
               </div>
@@ -303,9 +334,14 @@ const Dashboard: React.FC<DashboardProps> = ({
           <div className={styles.cardHeader}>
             <div
               className={styles.cardIcon}
-              style={{ backgroundColor: colors.success[100] }}
+              style={{
+                backgroundColor: getColor("success", "100", effectiveDark),
+              }}
             >
-              <Activity size={24} color={colors.success[600]} />
+              <Activity
+                size={24}
+                color={getColor("success", "600", effectiveDark)}
+              />
             </div>
             <h3>System Health</h3>
           </div>
@@ -315,11 +351,17 @@ const Dashboard: React.FC<DashboardProps> = ({
             </div>
             <div className={styles.subStats}>
               <div className={styles.subStat}>
-                <Server size={16} color={colors.neutral[500]} />
+                <Server
+                  size={16}
+                  color={getColor("neutral", "500", effectiveDark)}
+                />
                 <span>CPU Usage</span>
               </div>
               <div className={styles.subStat}>
-                <TrendingUp size={16} color={colors.info[500]} />
+                <TrendingUp
+                  size={16}
+                  color={getColor("info", "500", effectiveDark)}
+                />
                 <span>
                   {summary.systemMetrics.memory.percentage.toFixed(1)}% Memory
                 </span>
@@ -333,9 +375,11 @@ const Dashboard: React.FC<DashboardProps> = ({
           <div className={styles.cardHeader}>
             <div
               className={styles.cardIcon}
-              style={{ backgroundColor: colors.info[100] }}
+              style={{
+                backgroundColor: getColor("info", "100", effectiveDark),
+              }}
             >
-              <Clock size={24} color={colors.info[600]} />
+              <Clock size={24} color={getColor("info", "600", effectiveDark)} />
             </div>
             <h3>Uptime</h3>
           </div>
@@ -359,17 +403,37 @@ const Dashboard: React.FC<DashboardProps> = ({
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
             <h2>Recent Alerts</h2>
-            <button className={styles.linkButton}>View All</button>
+            <button
+              className={styles.linkButton}
+              onClick={() => onNavigate?.("alerts")}
+            >
+              View All
+            </button>
           </div>
           <div className={styles.alertsList}>
             {recentAlerts.length === 0 ? (
               <div className={styles.emptyState}>
-                <CheckCircle2 size={48} color={colors.success[500]} />
+                <CheckCircle2
+                  size={48}
+                  color={getColor("success", "500", effectiveDark)}
+                />
                 <p>No recent alerts</p>
               </div>
             ) : (
               recentAlerts.slice(0, 5).map((alert) => (
-                <div key={alert.id} className={styles.alertItem}>
+                <div
+                  key={alert.id}
+                  className={styles.alertItem}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onNavigate?.("alerts", alert.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      onNavigate?.("alerts", alert.id);
+                    }
+                  }}
+                  style={{ cursor: "pointer" }}
+                >
                   <div
                     className={styles.alertSeverity}
                     style={{
@@ -406,11 +470,28 @@ const Dashboard: React.FC<DashboardProps> = ({
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
             <h2>Top Containers</h2>
-            <button className={styles.linkButton}>View All</button>
+            <button
+              className={styles.linkButton}
+              onClick={() => onNavigate?.("containers")}
+            >
+              View All
+            </button>
           </div>
           <div className={styles.containersList}>
             {topContainers.map((container) => (
-              <div key={container.id} className={styles.containerItem}>
+              <div
+                key={container.id}
+                className={styles.containerItem}
+                role="button"
+                tabIndex={0}
+                onClick={() => onNavigate?.("containers", container.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    onNavigate?.("containers", container.id);
+                  }
+                }}
+                style={{ cursor: "pointer" }}
+              >
                 <div className={styles.containerHeader}>
                   {getStatusIcon(container.status)}
                   <div className={styles.containerInfo}>
