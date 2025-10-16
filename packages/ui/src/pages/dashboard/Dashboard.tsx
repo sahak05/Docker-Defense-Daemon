@@ -221,6 +221,13 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       {/* Header */}
       <header className={styles.header}>
+        <div>
+          <h1 className="text-foreground mb-1">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Docker Defense Daemon Overview
+          </p>
+        </div>
+
         <div className={styles.headerActions}>
           {/* Daemon Status */}
           <div className={styles.daemonStatus}>
@@ -242,6 +249,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               background: "transparent",
               cursor: "pointer",
               marginLeft: "1rem",
+              display: "none",
             }}
           >
             {effectiveDark ? (

@@ -1,7 +1,8 @@
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import App from "./App";
 
 test("renders dashboard title", () => {
-  const { getByText } = render(<App />);
-  expect(getByText(/Dashboard/i)).toBeInTheDocument();
+  render(<App />);
+  const navButton = screen.getByRole("button", { name: /dashboard/i });
+  expect(navButton).toBeInTheDocument();
 });
