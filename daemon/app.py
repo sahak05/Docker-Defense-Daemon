@@ -63,7 +63,7 @@ def list_alerts():
 
 @app.route("/api/falco-alert", methods=["POST"])
 def falco_alert():
-    # Receives Falco JSON (http_output)adds: enrichment(docker inspect),optional Trivy summary and persistence to alerts.jsonl
+    # Receives Falco JSON (http_output)adds: enrichment(docker inspect),optional Trivy summary and persistence to alerts.jsonl 
     try:
         payload = request.get_json(force=True, silent=False)
     except Exception as e:

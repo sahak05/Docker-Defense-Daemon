@@ -86,7 +86,7 @@ def analyze_container(cid, metadata_inspection, image, action):
     try:
         risks_mapping = retrieve_all_risks(cid, metadata_inspection, image, action)
 
-        # Grab image refs for correlation
+        # Grab image refs for correlation 
         image_ref = risks_mapping.get("image") or ""
         image_id  = (metadata_inspection or {}).get("Image") or ""
 

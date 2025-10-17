@@ -17,8 +17,7 @@ COPY . .
 
 # RUN useradd -m daemonuser
 # RUN chown -R daemonuser:daemonuser /app
-
-# USER daemonuser
+# USER daemonuser 
 
 EXPOSE 8080
 

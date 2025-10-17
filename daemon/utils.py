@@ -113,7 +113,7 @@ def persist_alert(alert_json, file_path=ALERTS_FILE):
     except Exception as e:
         log.exception("Failed to persist alert: %s", e)
 
-# This is the helper our app imports
+# This is the helper our app imports 
 def persist_alert_line(obj: dict, path: str = ALERTS_FILE):
     persist_alert(obj, path)
 
