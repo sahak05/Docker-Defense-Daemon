@@ -71,7 +71,7 @@ def retrieve_all_risks(cid, metadata, image, action):
         risks.append({
             "rule": "Runs as root",
             "severity": "medium",
-            "description": "No non-root user configured in container."
+            "description": "No non-root user configured in contaciner."
         })
 
     if secopt and any("seccomp=unconfined" in str(s) for s in secopt):
@@ -108,13 +108,13 @@ def persist_alert(alert_json, file_path=ALERTS_FILE):
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(alert_json) + "\n")
-        log.info("Persisted alert for container %s to %s", alert_json.get("id"), file_path)
+        cid = alert_json.get("id") or alert_json.get("container", {}).get("id") or alert_json.get("metadata", {}).get("id")
+        log.info("Persisted alert%s to %s", f" for container {cid}" if cid else "", file_path)
     except Exception as e:
         log.exception("Failed to persist alert: %s", e)
 
-# <-- This is the helper your app imports
+# This is the helper our app imports
 def persist_alert_line(obj: dict, path: str = ALERTS_FILE):
-    """Append a single JSON object to JSONL file (wrapper for persist_alert)."""
     persist_alert(obj, path)
 
 def enrich_with_inspect(container_id: str) -> dict:
@@ -132,6 +132,7 @@ def enrich_with_inspect(container_id: str) -> dict:
         privileged = bool(hostcfg.get("Privileged", False))
         user = (cfg.get("User") or "").strip()
         image = cfg.get("Image")
+        image_id = meta.get("Image") 
 
         detected = []
         if privileged:
@@ -149,6 +150,7 @@ def enrich_with_inspect(container_id: str) -> dict:
         return {
             "container_name": c.name,
             "image": image,
+            "image_id": image_id,  
             "mounts": mounts,
             "cap_add": caps,
             "privileged": privileged,
@@ -160,42 +162,49 @@ def enrich_with_inspect(container_id: str) -> dict:
         log.warning("inspect failed for %s: %s", container_id, e)
         return {}
 
-def trivy_scan_image(image: str):
-    """Optional Trivy scanner; returns summary or None."""
-    import subprocess
-    if not image:
-        return None
-    try:
-        log.info("Running Trivy scan for image %s", image)
-        cmd = ["trivy", "image", "--quiet", "--format", "json", image]
-        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, timeout=90)
-        data = json.loads(out)
+_TRIVY_CACHE = {}  # key -> summary
 
+def trivy_scan_image(image_ref: str, image_id: str | None = None, timeout_sec: int = 90):
+    
+    import subprocess, json, logging
+    log = logging.getLogger(__name__)
+
+    if not image_ref:
+        return None
+
+    cache_key = image_id or image_ref
+    if cache_key in _TRIVY_CACHE:
+        return _TRIVY_CACHE[cache_key]
+
+    try:
+        out = subprocess.check_output(
+            ["trivy", "image", "--quiet", "--format", "json", image_ref],
+            stderr=subprocess.STDOUT, timeout=timeout_sec
+        )
+        data = json.loads(out)
         vulns = []
-        for result in data.get("Results", []) or []:
-            for v in result.get("Vulnerabilities", []) or []:
+        for r in data.get("Results", []) or []:
+            for v in r.get("Vulnerabilities", []) or []:
                 vulns.append({
                     "id": v.get("VulnerabilityID"),
                     "pkg": v.get("PkgName"),
                     "ver": v.get("InstalledVersion"),
                     "sev": v.get("Severity"),
                 })
-
         summary = {
             "count": len(vulns),
-            "high_or_critical": sum(1 for v in vulns if v.get("sev") in ("HIGH", "CRITICAL")),
+            "high_or_critical": sum(1 for x in vulns if x.get("sev") in ("HIGH","CRITICAL")),
             "sample": vulns[:5],
         }
-        log.info("Trivy scan complete for %s: %s vulns, %s high/critical",
-                 image, summary["count"], summary["high_or_critical"])
+        _TRIVY_CACHE[cache_key] = summary
         return summary
 
     except FileNotFoundError:
-        log.warning("Trivy not installed — skipping image scan for %s", image)
+        log.warning("Trivy binary not found in container PATH; skipping scan.")
         return None
     except subprocess.CalledProcessError as e:
-        log.warning("Trivy returned error for %s: %s", image, e)
+        log.warning("Trivy failed for %s: %s", image_ref, e)
         return None
     except Exception as e:
-        log.warning("Trivy scan failed for %s: %s", image, e)
+        log.warning("Trivy error for %s: %s", image_ref, e)
         return None

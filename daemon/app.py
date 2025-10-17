@@ -73,7 +73,9 @@ def falco_alert():
     output = payload.get("output")
     priority = (payload.get("priority") or "warning").lower()
     fields = payload.get("output_fields") or {}
-    container_id = fields.get("container.id")
+    container_id = (fields.get("container.id") or fields.get("containerId")
+    or (payload.get("container") or {}).get("id")
+    or (payload.get("context", {}) or {}).get("container_id") or "" )
     proc_name = fields.get("proc.name")
     user_name = fields.get("user.name")
 
@@ -90,9 +92,11 @@ def falco_alert():
     enrichment = enrich_with_inspect(container_id or "")
 
     # Trivy(skipped if not available)
+    image_ref = enrichment.get("image")
+    image_id  = enrichment.get("image_id")
     trivy = None
-    if enrichment.get("image"):
-        trivy = trivy_scan_image(enrichment["image"])
+    if image_ref:
+        trivy = trivy_scan_image(image_ref, image_id=image_id)
 
     alert_record = {
         "source": "falco",
@@ -112,8 +116,8 @@ def falco_alert():
         "detected_risks": enrichment.get("detected_risks") or [],
         "process": proc_name,
         "user": user_name,
-        "trivy": trivy,    # None or summary dict
-        "raw": payload     # full Falco payload kept for debugging
+        "trivy": trivy,   
+        "raw": payload     
     }
     persist_alert_line(alert_record, ALERTS_FILE)
     return jsonify({"status": "received"}), 200

@@ -4,6 +4,7 @@ import json
 import subprocess
 import logging
 from datetime import datetime
+from utils import trivy_scan_image
 
 from utils import retrieve_all_risks, persist_alert
 RED = "\033[91m"
@@ -85,12 +86,13 @@ def analyze_container(cid, metadata_inspection, image, action):
     try:
         risks_mapping = retrieve_all_risks(cid, metadata_inspection, image, action)
 
-        # run Trivy scan 
-        trivy_summary = run_trivy_scan(image)
-        if trivy_summary:
-            risks_mapping["trivy"] = trivy_summary
-        else:
-            risks_mapping["trivy"] = {"count": 0, "note": "Trivy skipped or not installed"}
+        # Grab image refs for correlation
+        image_ref = risks_mapping.get("image") or ""
+        image_id  = (metadata_inspection or {}).get("Image") or ""
+
+        # Synchronous Trivy (with timeout + cache)
+        trivy_summary = trivy_scan_image(image_ref, image_id=image_id)
+        risks_mapping["trivy"] = trivy_summary or {"count": 0, "note": "trivy skipped"}
 
         #persist full results (config + trivy)
         persist_alert(risks_mapping, ALERTS_FILE)
