@@ -1,24 +1,70 @@
-# 1) cat /etc/passwd in a container
-- rule: Cat etc passwd
-  desc: Detect reading /etc/passwd with cat inside a container
-  condition: >
-    container and proc.name = cat and
-    (fd.name = /etc/passwd or
-     (evt.type in (open,openat,openat2) and fd.name startswith /etc/passwd))
-  output: >
-    Falco: cat /etc/passwd in container (user=%user.name proc=%proc.name file=%fd.name
-    container=%container.name image=%container.image.repository id=%container.id)
-  priority: WARNING
-  tags: [container, filesystem, exfil]
+rules:
+  - rule: Write below etc
+    desc: An attempt to write to any file below /etc
+    condition: evt.type = write and fd.name startswith /etc
+    output: >
+      Write below /etc detected (user=%user.name command=%proc.cmdline file=%fd.name)
+    priority: WARNING
+    tags: [filesystem, mitre_persistence]
 
-# 2) /bin/sh interactive exec (already similar in default but keep explicit)
-- rule: Terminal shell in container
-  desc: Detects an interactive shell spawned in a container
-  condition: >
-    container and proc.name in (sh,bash,zsh,ash) and
-    evt.type=execve and proc.tty != 0
-  output: >
-    Falco: Terminal shell started (user=%user.name proc=%proc.name
-    container=%container.name image=%container.image.repository id=%container.id)
-  priority: WARNING
-  tags: [container, shell, exec]
+  - rule: Interactive shell in container
+    desc: Detects an interactive shell spawned inside a container
+    condition: container.id != host and proc.name in (bash, sh, zsh) and evt.type = execve and proc.pname != su and proc.pname != sudo
+    output: >
+      Interactive shell in container (container=%container.id user=%user.name shell=%proc.name cmdline=%proc.cmdline)
+    priority: WARNING
+    tags: [container, shell_activity]
+
+  - rule: Read sensitive file
+    desc: Someone is reading sensitive files like /etc/shadow or /etc/passwd
+    condition: evt.type=read and fd.name in (/etc/shadow, /etc/passwd, /etc/gshadow)
+    output: >
+      Sensitive file read (command=%proc.cmdline file=%fd.name user=%user.name)
+    priority: WARNING
+    tags: [filesystem, mitre_discovery]
+
+  - rule: Outbound connection from container
+    desc: Detects outbound internet connections from a container
+    condition: evt.type = connect and fd.sip != 127.0.0.1 and container.id != host
+    output: >
+      Outbound connection from container (container=%container.id command=%proc.cmdline ip=%fd.sip port=%fd.sport)
+    priority: NOTICE
+    tags: [network, container, mitre_exfiltration]
+
+  - rule: Package manager activity in container
+    desc: Detects use of package managers inside containers
+    condition: container.id != host and proc.name in (apt, apt-get, yum, dnf, apk, zypper)
+    output: >
+      Package manager used inside container (container=%container.id user=%user.name command=%proc.cmdline)
+    priority: WARNING
+    tags: [container, package_mgmt, mitre_persistence]
+
+  - rule: Ptrace syscall used
+    desc: Detect usage of ptrace which may indicate debugging or process injection
+    condition: evt.type = ptrace
+    output: >
+      Ptrace syscall used (user=%user.name command=%proc.cmdline pid=%proc.pid)
+    priority: ERROR
+    tags: [syscall, mitre_defense_evasion]
+
+  - rule: Shell in secure container
+    desc: Detect interactive shell only in containers labeled secure=true
+    condition: container.id != host and container.label.secure = "true" and proc.name in (bash, sh, zsh) and evt.type = execve
+    output: >
+      Shell spawned in secure container (id=%container.id user=%user.name command=%proc.cmdline)
+    priority: WARNING
+    tags: [container, shell_activity]
+
+  - rule: Root running unknown binary
+    desc: Detect if root is executing anything not in a known list
+    condition: user.uid=0 and not proc.name in (bash, sh, ls, cat, curl, wget, ps)
+    output: >
+      Root user ran unknown binary (cmd=%proc.cmdline path=%proc.exepath)
+    priority: CRITICAL
+    tags: [privilege, root_activity]
+
+http_output:
+  enabled: true
+  url: "http://daemon-defense:8080/api/falco-alert"
+  method: POST
+  insecure: true

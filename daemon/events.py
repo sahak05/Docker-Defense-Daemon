@@ -62,7 +62,6 @@ def run_trivy_scan(image_name: str):
         return None
 
 
-# daemon/events.py
 from utils import (
     retrieve_all_risks, persist_alert, load_config,
     trivy_scan_image, approvals_get, approvals_set, policy_should_block
@@ -78,7 +77,6 @@ def docker_event_listener():
                 # handle image pulls too
                 if event.get("Type") == "image" and event.get("Action") == "pull":
                     repo = (event.get("Actor", {}) or {}).get("Attributes", {}).get("name", "")
-                    # lazy scan to pre-warm cache (non-blocking for demo)
                     if repo:
                         trivy_scan_image(repo, image_id=None)
                 continue
@@ -97,7 +95,6 @@ def docker_event_listener():
                 pass
             image_id = (metadata or {}).get("Image")  # sha256:...
 
-            # === Gate on CREATE (best place to block before it runs) ===
             if action == "create":
                 # skip if not enforcing
                 mode = ((cfg.get("gate") or {}).get("mode") or "monitor").lower()
@@ -108,11 +105,8 @@ def docker_event_listener():
                     if appr and appr.get("approved") is True:
                         pass
                     else:
-                        # run trivy now
                         trivy_summary = trivy_scan_image(image_ref or "", image_id=image_id)
-                        # decide
                         if policy_should_block(trivy_summary or {}, cfg):
-                            # optionally remove the just-created container
                             if (cfg.get("gate", {}).get("auto_remove_blocked_container", True)):
                                 try:
                                     client.api.remove_container(cid, force=True)
@@ -130,10 +124,8 @@ def docker_event_listener():
                                 "status": "blocked",
                             }
                             persist_alert(alert, "/app/alerts/alerts.jsonl")
-                            # do not proceed to risk mapping for a removed container
                             continue
 
-            # === Normal risk pipeline for start/restart (and allowed create) ===
             risks_mapping = retrieve_all_risks(cid, metadata, image_ref, action)
 
             # attach trivy summary (cached or fresh)
@@ -143,7 +135,6 @@ def docker_event_listener():
 
             persist_alert(risks_mapping, "/app/alerts/alerts.jsonl")
 
-            # console summary
             risks = risks_mapping.get("risks") or []
             if risks:
                 print(f"[!] Risks found for container {cid}:")
@@ -161,14 +152,11 @@ def analyze_container(cid, metadata_inspection, image, action):
         image_ref = risks_mapping.get("image") or ""
         image_id  = (metadata_inspection or {}).get("Image") or ""
 
-        # Synchronous Trivy (with timeout + cache)
         trivy_summary = trivy_scan_image(image_ref, image_id=image_id)
         risks_mapping["trivy"] = trivy_summary or {"count": 0, "note": "trivy skipped"}
 
-        #persist full results (config + trivy)
         persist_alert(risks_mapping, ALERTS_FILE)
 
-        #print risk summary to console
         if risks_mapping.get("risks"):
             print(f"{YELLOW}[!] Risks found for container {cid}:{RESET}")
             for r in risks_mapping["risks"]:

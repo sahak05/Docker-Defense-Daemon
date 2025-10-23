@@ -63,7 +63,7 @@ def list_alerts():
 
 @app.route("/api/falco-alert", methods=["POST"])
 def falco_alert():
-    # Receives Falco JSON (http_output)adds: enrichment(docker inspect),optional Trivy summary and persistence to alerts.jsonl 
+
     try:
         payload = request.get_json(force=True, silent=False)
     except Exception as e:
@@ -88,10 +88,8 @@ def falco_alert():
         "user": user_name
     }))
 
-    # enrichment
     enrichment = enrich_with_inspect(container_id or "")
 
-    # Trivy(skipped if not available)
     image_ref = enrichment.get("image")
     image_id  = enrichment.get("image_id")
     trivy = None
@@ -120,7 +118,7 @@ def falco_alert():
         "raw": payload     
     }
 
-    # 🧠 Auto-stop hook based on Falco rule
+    #  Auto-stop hook based on Falco rule
     cfg = load_config()
     auto_rules = (cfg.get("falco", {}) or {}).get("auto_stop_on_rules", []) or []
     if rule in auto_rules and container_id:

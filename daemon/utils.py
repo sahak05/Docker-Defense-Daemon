@@ -8,8 +8,8 @@ import yaml
 from datetime import datetime, timedelta
 
 _CONFIG = None
-_APPROVALS = {}     # key: image_id or image_ref -> {"approved": bool, "ts": ...}
-_TRIVY_CACHE = {}   # already have similar; keep or merge
+_APPROVALS = {}    
+_TRIVY_CACHE = {}   
 
 def load_config(path="/app/config.yml"):
     global _CONFIG
@@ -142,7 +142,6 @@ def persist_alert(alert_json, file_path=ALERTS_FILE):
     except Exception as e:
         log.exception("Failed to persist alert: %s", e)
 
-# This is the helper our app imports 
 def persist_alert_line(obj: dict, path: str = ALERTS_FILE):
     persist_alert(obj, path)
 

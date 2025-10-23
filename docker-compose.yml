@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   daemon-defense:
@@ -20,7 +19,7 @@ services:
       retries: 10
       start_period: 10s
   falco:
-    image: falcosecurity/falco:latest
+    image:  falcosecurity/falco:latest
     privileged: true
     volumes:
       - /var/run/docker.sock:/host/var/run/docker.sock:ro
