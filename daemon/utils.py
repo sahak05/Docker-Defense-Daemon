@@ -4,6 +4,35 @@ import json
 import docker
 import logging
 from datetime import datetime
+import yaml
+from datetime import datetime, timedelta
+
+_CONFIG = None
+_APPROVALS = {}     # key: image_id or image_ref -> {"approved": bool, "ts": ...}
+_TRIVY_CACHE = {}   # already have similar; keep or merge
+
+def load_config(path="/app/config.yml"):
+    global _CONFIG
+    if _CONFIG is not None:
+        return _CONFIG
+    try:
+        with open(path, "r") as f:
+            _CONFIG = yaml.safe_load(f) or {}
+    except Exception:
+        _CONFIG = {}
+    return _CONFIG
+
+def approvals_get(image_key: str):
+    return _APPROVALS.get(image_key)
+
+def approvals_set(image_key: str, approved: bool):
+    _APPROVALS[image_key] = {"approved": approved, "ts": datetime.utcnow().isoformat()+"Z"}
+
+def policy_should_block(trivy_summary: dict, cfg: dict):
+    if not trivy_summary:
+        return False
+    threshold = int(((cfg.get("trivy") or {}).get("block_if_high_or_critical", 0)))
+    return trivy_summary.get("high_or_critical", 0) >= threshold
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)

@@ -62,24 +62,95 @@ def run_trivy_scan(image_name: str):
         return None
 
 
+# daemon/events.py
+from utils import (
+    retrieve_all_risks, persist_alert, load_config,
+    trivy_scan_image, approvals_get, approvals_set, policy_should_block
+)
+
 def docker_event_listener():
     client = docker.from_env()
+    cfg = load_config()
+
     for event in client.api.events(decode=True):
-        if event.get("Type") == "container" and event.get("Action") in ("create", "start", "restart"):
-            cid = event.get("id")[:12]
-            c_image = event.get("Actor", {}).get("Attributes", {}).get("image", "")
-            c_action = event["Action"]
-            print(f"{GREEN}[INFO]{RESET} [Docker Listener] {cid} on event {c_action} with image ({c_image})")
+        try:
+            if event.get("Type") != "container":
+                # handle image pulls too
+                if event.get("Type") == "image" and event.get("Action") == "pull":
+                    repo = (event.get("Actor", {}) or {}).get("Attributes", {}).get("name", "")
+                    # lazy scan to pre-warm cache (non-blocking for demo)
+                    if repo:
+                        trivy_scan_image(repo, image_id=None)
+                continue
+
+            action = event.get("Action") or ""
+            if action not in ("create", "start", "restart"):
+                continue
+
+            cid = (event.get("id") or "")[:12]
+            attrs = event.get("Actor", {}).get("Attributes", {}) or {}
+            image_ref = attrs.get("image", "") or attrs.get("image.name", "")
+            metadata = {}
             try:
-                metadata_inspection = client.api.inspect_container(cid)
-                threading.Thread(
-                    target=analyze_container,
-                    args=(cid, metadata_inspection, c_image, c_action),
-                    daemon=True,
-                ).start()
-                time.sleep(1)
-            except Exception as e:
-                print(f"{YELLOW}[WARN]{RESET} Failed to inspect container {cid}: {e}")
+                metadata = client.api.inspect_container(cid)
+            except Exception:
+                pass
+            image_id = (metadata or {}).get("Image")  # sha256:...
+
+            # === Gate on CREATE (best place to block before it runs) ===
+            if action == "create":
+                # skip if not enforcing
+                mode = ((cfg.get("gate") or {}).get("mode") or "monitor").lower()
+                if (cfg.get("trivy", {}).get("enabled", True)) and mode == "enforce":
+                    # if there is a prior approval for this image digest, allow
+                    key = image_id or image_ref
+                    appr = approvals_get(key)
+                    if appr and appr.get("approved") is True:
+                        pass
+                    else:
+                        # run trivy now
+                        trivy_summary = trivy_scan_image(image_ref or "", image_id=image_id)
+                        # decide
+                        if policy_should_block(trivy_summary or {}, cfg):
+                            # optionally remove the just-created container
+                            if (cfg.get("gate", {}).get("auto_remove_blocked_container", True)):
+                                try:
+                                    client.api.remove_container(cid, force=True)
+                                except Exception:
+                                    pass
+                            # write a "blocked" alert
+                            alert = {
+                                "source": "daemon",
+                                "timestamp": datetime.utcnow().isoformat()+"Z",
+                                "rule": "image_blocked_by_trivy",
+                                "summary": f"Blocked container create: {image_ref} (digest {image_id})",
+                                "severity": "high",
+                                "container": {"id": cid, "image": image_ref},
+                                "trivy": trivy_summary,
+                                "status": "blocked",
+                            }
+                            persist_alert(alert, "/app/alerts/alerts.jsonl")
+                            # do not proceed to risk mapping for a removed container
+                            continue
+
+            # === Normal risk pipeline for start/restart (and allowed create) ===
+            risks_mapping = retrieve_all_risks(cid, metadata, image_ref, action)
+
+            # attach trivy summary (cached or fresh)
+            if image_ref:
+                trivy_summary = trivy_scan_image(image_ref, image_id=image_id)
+                risks_mapping["trivy"] = trivy_summary or {"count":0}
+
+            persist_alert(risks_mapping, "/app/alerts/alerts.jsonl")
+
+            # console summary
+            risks = risks_mapping.get("risks") or []
+            if risks:
+                print(f"[!] Risks found for container {cid}:")
+                for r in risks:
+                    print(f" - {r['rule']} ({r['severity']}): {r['description']}")
+        except Exception as e:
+            print(f"[WARN] event loop error: {e}")
 
 
 def analyze_container(cid, metadata_inspection, image, action):

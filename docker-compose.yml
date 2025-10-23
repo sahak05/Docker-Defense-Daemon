@@ -22,23 +22,20 @@ services:
   falco:
     image: falcosecurity/falco:latest
     privileged: true
-    # Falco needs access to host resources for syscall monitoring
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro   #ensure Falco sees Docker API here
+      - /var/run/docker.sock:/host/var/run/docker.sock:ro
       - /dev:/host/dev
       - /proc:/host/proc:ro
       - /boot:/host/boot:ro
       - /lib/modules:/host/lib/modules:ro
       - /usr:/host/usr:ro
       - /etc:/host/etc:ro
-      - /var/log/falco_events.log:/var/log/falco_events.log
-      # - ./falco_rules:/etc/falco/rules.d         # (optional: your custom rules dir)
-      # - ./falco.yaml:/etc/falco/falco.yaml       # (optional: full config override)
-    environment:
-      - FALCO_JSON_OUTPUT=true
+      - ./falco_rules:/etc/falco/rules.d:ro
     command: >
       falco
+      -o log_level=info
       -o json_output=true
+      -o stdout_output.enabled=true
       -o http_output.enabled=true
       -o http_output.url=http://daemon-defense:8080/api/falco-alert
     depends_on:

@@ -119,8 +119,42 @@ def falco_alert():
         "trivy": trivy,   
         "raw": payload     
     }
+
+    # 🧠 Auto-stop hook based on Falco rule
+    cfg = load_config()
+    auto_rules = (cfg.get("falco", {}) or {}).get("auto_stop_on_rules", []) or []
+    if rule in auto_rules and container_id:
+        try:
+            dry = os.environ.get("DRY_RUN", "false").lower() in ("1","true","yes")
+            if not dry:
+                c = client.containers.get(container_id)
+                c.stop(timeout=int((cfg.get("falco") or {}).get("stop_grace_seconds", 5)))
+                alert_record["action_taken"] = "auto-stopped"
+            else:
+                alert_record["action_taken"] = "would-auto-stop (DRY_RUN)"
+        except Exception as e:
+            alert_record["action_taken_error"] = str(e)
+
+
     persist_alert_line(alert_record, ALERTS_FILE)
     return jsonify({"status": "received"}), 200
+
+from utils import approvals_get, approvals_set, load_config
+
+@app.route("/api/approvals/<path:image_key>", methods=["GET"])
+def get_approval(image_key):
+    return jsonify(approvals_get(image_key) or {"approved": False}), 200
+
+@app.route("/api/approvals/<path:image_key>/approve", methods=["POST"])
+def approve_image(image_key):
+    approvals_set(image_key, True)
+    return jsonify({"ok": True, "image": image_key, "approved": True}), 200
+
+@app.route("/api/approvals/<path:image_key>/deny", methods=["POST"])
+def deny_image(image_key):
+    approvals_set(image_key, False)
+    return jsonify({"ok": True, "image": image_key, "approved": False}), 200
+
 
 if __name__ == "__main__":
     docker_thread()
