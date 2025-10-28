@@ -1,18 +1,21 @@
-import time 
-from flask import Flask, request, jsonify 
-import docker
-import subprocess
-import json
-import logging, sys
 import os
+import sys
+import json
+import time
+import logging
+import threading
 from datetime import datetime, timezone
+from flask import Flask, request, jsonify
 from flask_cors import CORS
-
+import docker
 from events import docker_thread
 from utils import (
     persist_alert_line,
     enrich_with_inspect,
     trivy_scan_image,
+    approvals_get,
+    approvals_set,
+    load_config,
 )
 os.environ["PYTHONUNBUFFERED"] = "1"
 logging.basicConfig(
@@ -22,7 +25,6 @@ logging.basicConfig(
 )
 
 app = Flask(__name__)
-# allow UI served on another port/origin to call /api/*
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 client = docker.from_env()
@@ -30,12 +32,13 @@ try:
     logging.info("Docker version: %s", client.version())
 except Exception as e:
     logging.warning("Could not query Docker version: %s", e)
+
 ALERTS_FILE = os.environ.get("ALERTS_FILE", "/app/alerts/alerts.jsonl")
 os.makedirs(os.path.dirname(ALERTS_FILE), exist_ok=True)
 
 @app.route("/")
 def starting():
-    return 'Welcome to our daemon defense for containers!'
+    return 'Welcome to Docker Defense Daemon!'
 
 @app.route("/health")
 def health():
@@ -43,12 +46,11 @@ def health():
 
 @app.route("/api/alerts", methods=["GET"])
 def list_alerts():
-
     limit = max(1, min(1000, int(request.args.get("limit", "100"))))
     if not os.path.exists(ALERTS_FILE):
         return jsonify([]), 200
-    rows = []
     try:
+        rows = []
         with open(ALERTS_FILE, "r", encoding="utf-8") as f:
             for line in f:
                 try:
@@ -61,84 +63,101 @@ def list_alerts():
         logging.exception("reading alerts failed")
         return jsonify({"error": str(e)}), 500
 
+def process_falco_alert(payload):
+    """
+    Falco alert processing executed in a background thread.
+    Runs enrichment, Trivy scanning, and persistence.
+    """
+    try:
+        rule = payload.get("rule")
+        output = payload.get("output")
+        priority = (payload.get("priority") or "warning").lower()
+        fields = payload.get("output_fields") or {}
+
+        container_id = (
+            fields.get("container.id")
+            or fields.get("containerId")
+            or (payload.get("container") or {}).get("id")
+            or (payload.get("context", {}) or {}).get("container_id")
+            or ""
+        )
+        proc_name = fields.get("proc.name")
+        user_name = fields.get("user.name")
+
+        logging.info(json.dumps({
+            "source": "falco",
+            "rule": rule,
+            "output": output,
+            "container_id": container_id,
+            "proc": proc_name,
+            "user": user_name
+        }))
+
+        enrichment = enrich_with_inspect(container_id or "")
+        image_ref = enrichment.get("image")
+        image_id = enrichment.get("image_id")
+
+        trivy_summary = None
+        if image_ref:
+            trivy_summary = trivy_scan_image(image_ref, image_id=image_id)
+
+        alert_record = {
+            "source": "falco",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "rule": rule,
+            "summary": output,
+            "severity": priority,
+            "container": {
+                "id": container_id,
+                "name": enrichment.get("container_name"),
+                "image": enrichment.get("image"),
+                "user": enrichment.get("user"),
+                "privileged": enrichment.get("privileged"),
+                "cap_add": enrichment.get("cap_add"),
+                "mounts": enrichment.get("mounts"),
+            },
+            "detected_risks": enrichment.get("detected_risks") or [],
+            "process": proc_name,
+            "user": user_name,
+            "trivy": trivy_summary,
+            "raw": payload,
+        }
+
+        # Auto-stop logic based on Falco rules in config
+        cfg = load_config()
+        auto_rules = (cfg.get("falco", {}) or {}).get("auto_stop_on_rules", []) or []
+        if rule in auto_rules and container_id:
+            try:
+                dry = os.environ.get("DRY_RUN", "false").lower() in ("1", "true", "yes")
+                if not dry:
+                    c = client.containers.get(container_id)
+                    c.stop(timeout=int((cfg.get("falco") or {}).get("stop_grace_seconds", 5)))
+                    alert_record["action_taken"] = "auto-stopped"
+                else:
+                    alert_record["action_taken"] = "would-auto-stop (DRY_RUN)"
+            except Exception as e:
+                alert_record["action_taken_error"] = str(e)
+
+        # Persist alert to disk
+        persist_alert_line(alert_record, ALERTS_FILE)
+        logging.info(f"[Falco] Persisted async alert for {container_id or 'unknown'}")
+
+    except Exception as e:
+        logging.exception(f"[Falco] Async processing failed: {e}")
+
+
 @app.route("/api/falco-alert", methods=["POST"])
 def falco_alert():
-
+    
     try:
         payload = request.get_json(force=True, silent=False)
     except Exception as e:
         return jsonify({"error": f"invalid json: {e}"}), 400
 
-    rule = payload.get("rule")
-    output = payload.get("output")
-    priority = (payload.get("priority") or "warning").lower()
-    fields = payload.get("output_fields") or {}
-    container_id = (fields.get("container.id") or fields.get("containerId")
-    or (payload.get("container") or {}).get("id")
-    or (payload.get("context", {}) or {}).get("container_id") or "" )
-    proc_name = fields.get("proc.name")
-    user_name = fields.get("user.name")
-
-    logging.info(json.dumps({
-        "source": "falco",
-        "rule": rule,
-        "output": output,
-        "container_id": container_id,
-        "proc": proc_name,
-        "user": user_name
-    }))
-
-    enrichment = enrich_with_inspect(container_id or "")
-
-    image_ref = enrichment.get("image")
-    image_id  = enrichment.get("image_id")
-    trivy = None
-    if image_ref:
-        trivy = trivy_scan_image(image_ref, image_id=image_id)
-
-    alert_record = {
-        "source": "falco",
-        "timestamp":  datetime.now(timezone.utc).isoformat(),
-        "rule": rule,
-        "summary": output,
-        "severity": priority,
-        "container": {
-            "id": container_id,
-            "name": enrichment.get("container_name"),
-            "image": enrichment.get("image"),
-            "user": enrichment.get("user"),
-            "privileged": enrichment.get("privileged"),
-            "cap_add": enrichment.get("cap_add"),
-            "mounts": enrichment.get("mounts"),
-        },
-        "detected_risks": enrichment.get("detected_risks") or [],
-        "process": proc_name,
-        "user": user_name,
-        "trivy": trivy,   
-        "raw": payload     
-    }
-
-    #  Auto-stop hook based on Falco rule
-    cfg = load_config()
-    auto_rules = (cfg.get("falco", {}) or {}).get("auto_stop_on_rules", []) or []
-    if rule in auto_rules and container_id:
-        try:
-            dry = os.environ.get("DRY_RUN", "false").lower() in ("1","true","yes")
-            if not dry:
-                c = client.containers.get(container_id)
-                c.stop(timeout=int((cfg.get("falco") or {}).get("stop_grace_seconds", 5)))
-                alert_record["action_taken"] = "auto-stopped"
-            else:
-                alert_record["action_taken"] = "would-auto-stop (DRY_RUN)"
-        except Exception as e:
-            alert_record["action_taken_error"] = str(e)
-
-
-    persist_alert_line(alert_record, ALERTS_FILE)
+    threading.Thread(target=process_falco_alert, args=(payload,)).start()
     return jsonify({"status": "received"}), 200
 
-from utils import approvals_get, approvals_set, load_config
-
+#  IMAGE APPROVAL ENDPOINTS
 @app.route("/api/approvals/<path:image_key>", methods=["GET"])
 def get_approval(image_key):
     return jsonify(approvals_get(image_key) or {"approved": False}), 200
@@ -153,7 +172,6 @@ def deny_image(image_key):
     approvals_set(image_key, False)
     return jsonify({"ok": True, "image": image_key, "approved": False}), 200
 
-
 if __name__ == "__main__":
-    docker_thread()
+    docker_thread()  # Start background Docker event listener
     app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)

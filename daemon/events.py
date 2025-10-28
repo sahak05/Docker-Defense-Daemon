@@ -21,7 +21,6 @@ ALERTS_FILE = "/app/alerts/alerts.jsonl"
 
 def run_trivy_scan(image_name: str):
     # Run a Trivy scan on the image and return summarized vulnerabilities.
-    # If Trivy is not installed or fails, return None instead of crashing.
 
     if not image_name:
         return None

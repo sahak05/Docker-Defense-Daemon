@@ -21,8 +21,9 @@ services:
   falco:
     image:  falcosecurity/falco:latest
     privileged: true
+    pid: "host"
     volumes:
-      - /var/run/docker.sock:/host/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - /dev:/host/dev
       - /proc:/host/proc:ro
       - /boot:/host/boot:ro
@@ -37,6 +38,7 @@ services:
       -o stdout_output.enabled=true
       -o http_output.enabled=true
       -o http_output.url=http://daemon-defense:8080/api/falco-alert
+      -o ebpf.drop_failed_programs=true
     depends_on:
       daemon-defense:
         condition: service_healthy
