@@ -1,0 +1,16 @@
+# config.yml
+trivy:
+  enabled: true
+  timeout: 90        # seconds
+  block_if_high_or_critical: 1   # number of HIGH+CRITICAL to block
+  cache_ttl_minutes: 60
+
+gate:
+  mode: "enforce"    # "enforce" blocks; "monitor" only logs
+  auto_remove_blocked_container: true
+
+falco:
+  auto_stop_on_rules:
+    - "Terminal shell in container"
+    - "Cat etc passwd"
+  stop_grace_seconds: 5

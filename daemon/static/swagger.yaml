@@ -1,0 +1,400 @@
+openapi: "3.0.0"
+info:
+  title: Docker Defense Daemon API
+  version: "1.0.0"
+  description: |
+    API for the Docker Defense Daemon — lists persisted alerts, receives Falco alerts,
+    and exposes simple image approval endpoints.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  /:
+    get:
+      summary: Root
+      description: Welcome message.
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "Welcome to Docker Defense Daemon!"
+
+  /health:
+    get:
+      summary: Health check
+      description: Returns 200 if the service is healthy.
+      responses:
+        "200":
+          description: Service healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "OK"
+
+  /api/alerts:
+    get:
+      summary: List recent alerts
+      description: Returns persisted alerts.
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of alerts to return (1-1000)
+          required: false
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: Array of alert objects (JSON)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Alert'
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/falco-alert:
+    post:
+      summary: Receive Falco alert
+      description: Accepts a Falco alert (JSON). The server will asynchronously enrich, optionally scan image with Trivy, persist the alert, and return accepted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FalcoPayload'
+      responses:
+        "200":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: received
+        "400":
+          description: Invalid JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/approvals/{image_key}:
+    get:
+      summary: Get image approval
+      description: Return approval state for an image key
+      parameters:
+        - name: image_key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Approval state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  approved:
+                    type: boolean
+                    example: false
+
+  /api/approvals/{image_key}/approve:
+    post:
+      summary: Approve image
+      parameters:
+        - name: image_key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Image approved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  image:
+                    type: string
+        "400":
+          description: Bad request
+
+  /api/approvals/{image_key}/deny:
+    post:
+      summary: Deny image
+      parameters:
+        - name: image_key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Image denied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  image:
+                    type: string
+
+  /api/daemon-status:
+    get:
+      summary: Daemon operational status
+      description: |
+        Returns the current status of the daemon including uptime, Docker connectivity, 
+        version info, and alert statistics.
+      responses:
+        '200':
+          description: Status information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  daemon:
+                    type: string
+                    example: running
+                  uptime_seconds:
+                    type: number
+                    example: 1245.37
+                  docker_connected:
+                    type: boolean
+                    example: true
+                  alerts_file:
+                    type: string
+                    example: /app/alerts/alerts.jsonl
+                  alerts_count:
+                    type: integer
+                    example: 73
+                  docker_version:
+                    type: string
+                    example: 28.4.0
+                  api_version:
+                    type: string
+                    example: 1.51
+
+  /api/containers:
+    get:
+      summary: Retrieve recent container inspections
+      description: Return metadata and detected risk info for each inspected container event.
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 100
+          description: Maximum number of inspections to return
+      responses:
+        '200':
+          description: List of inspected containers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      example: "06b74d1b9a5e"
+                    image:
+                      type: string
+                      example: alpine
+                    action:
+                      type: string
+                      example: start
+                    metadata:
+                      type: object
+                    risks:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          rule:
+                            type: string
+                          severity:
+                            type: string
+                          description:
+                            type: string
+
+  /api/containers/{container_id}/stop:
+    post:
+      summary: Stop a running container
+      description: Stops a running container using its full or partial ID prefix.
+      parameters:
+        - in: path
+          name: container_id
+          required: true
+          schema:
+            type: string
+          description: Container ID or prefix
+      responses:
+        '200':
+          description: Successfully stopped container
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: stopped
+                  id:
+                    type: string
+                    example: 06b74d1b9a5e
+                  name:
+                    type: string
+                    example: practical_agnesi
+                  image:
+                    type: array
+                    items:
+                      type: string
+                    example: ["alpine:latest"]
+                  message:
+                    type: string
+                    example: Container stopped successfully.
+        '404':
+          description: Container not found
+        '500':
+          description: Internal error
+
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+    FalcoPayload:
+      type: object
+      description: Minimal subset of Falco JSON payloads your daemon expects.
+      properties:
+        time:
+          type: string
+          format: date-time
+          example: "2025-10-05T22:00:00Z"
+        rule:
+          type: string
+          example: "Terminal shell in container"
+        priority:
+          type: string
+          example: "Warning"
+        output:
+          type: string
+          example: "A shell was spawned in container"
+        output_fields:
+          type: object
+          additionalProperties: true
+          example:
+            container.id: "abc123"
+            proc.name: "bash"
+            user.name: "root"
+        # include other Falco fields as needed
+      required:
+        - rule
+
+    ContainerInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "0e4cb3fdc90f"
+        name:
+          type: string
+          example: "musing_euler"
+        image:
+          type: string
+          example: "alpine:latest"
+        user:
+          type: string
+          example: "0"
+        privileged:
+          type: boolean
+          example: true
+        cap_add:
+          type: array
+          items:
+            type: string
+        mounts:
+          type: array
+          items:
+            type: string
+
+    TrivySummary:
+      type: object
+      description: Top-level summary returned by Trivy (can be large; this is a lightweight placeholder).
+      properties:
+        Results:
+          type: array
+          items:
+            type: object
+
+    Alert:
+      type: object
+      properties:
+        source:
+          type: string
+          example: "falco"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-10-12T18:30:00Z"
+        rule:
+          type: string
+          example: "Terminal shell in container"
+        summary:
+          type: string
+        severity:
+          type: string
+          example: "warning"
+        container:
+          $ref: '#/components/schemas/ContainerInfo'
+        detected_risks:
+          type: array
+          items:
+            type: object
+            properties:
+              rule:
+                type: string
+              severity:
+                type: string
+              description:
+                type: string
+        process:
+          type: string
+        user:
+          type: string
+        trivy:
+          $ref: '#/components/schemas/TrivySummary'
+        raw:
+          type: object
+          description: Raw payload received from Falco (kept for forensic purposes)
+
+security: []
