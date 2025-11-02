@@ -2,3 +2,4 @@ flask
 flask-cors
 docker
 pyyaml
+flask-swagger-ui==4.11.1
