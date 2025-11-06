@@ -6,7 +6,7 @@ services:
       - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./config.yml:/app/config.yml
+      - ./config.yml:/app/config/config.yml
       - ./alerts:/app/alerts
     environment:
       - ALERTS_FILE=/app/alerts/alerts.jsonl

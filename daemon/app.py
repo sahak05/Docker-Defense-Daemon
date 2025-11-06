@@ -5,10 +5,9 @@ import time
 import logging
 import threading
 from datetime import datetime, timezone
-from flask import Flask, request, jsonify
-from flask_cors import CORS
 import docker
-from flask_swagger_ui import get_swaggerui_blueprint
+from flask import Flask, jsonify, request
+from flask_cors import CORS
 from events import docker_thread
 from utils import (
     persist_alert_line,
@@ -18,6 +17,8 @@ from utils import (
     approvals_set,
     load_config,
 )
+
+# --- Logging setup ---
 os.environ["PYTHONUNBUFFERED"] = "1"
 logging.basicConfig(
     level=logging.INFO,
@@ -25,19 +26,9 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s"
 )
 
-SWAGGER_URL = "/docs"
-API_URL = "/static/swagger.yaml"
-
-start_time = time.time()
-
+# --- Flask setup ---
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
-swaggerui_blueprint = get_swaggerui_blueprint(
-    SWAGGER_URL,
-    API_URL,
-    config={ "app_name": "Docker Defense Daemon" }
-)
-app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
 
 client = docker.from_env()
 try:
@@ -45,8 +36,11 @@ try:
 except Exception as e:
     logging.warning("Could not query Docker version: %s", e)
 
+start_time = time.time()
 ALERTS_FILE = os.environ.get("ALERTS_FILE", "/app/alerts/alerts.jsonl")
 os.makedirs(os.path.dirname(ALERTS_FILE), exist_ok=True)
+
+
 
 @app.route("/")
 def starting():
@@ -266,6 +260,159 @@ def daemon_status():
 
     return jsonify(status), 200
 
+@app.route("/api/dashboard", methods=["GET"])
+def get_dashboard():
+    """
+    Dashboard endpoint combining daemon status, container stats, and recent alerts.
+    """
+    try:
+        uptime = round(time.time() - start_time, 2)
+        docker_ok = False
+        docker_info = {}
+        containers_list = []
+        alerts_list = []
+        
+        # Get daemon status and docker info
+        try:
+            client_instance = docker.from_env()
+            docker_info = client_instance.version()
+            docker_ok = True
+            
+            # Get running containers
+            containers_list = client_instance.containers.list(all=True)
+        except Exception as e:
+            logging.warning(f"Docker connection error: {e}")
+            docker_info = {"error": str(e)}
+        
+        # Get alerts
+        try:
+            if os.path.exists(ALERTS_FILE):
+                with open(ALERTS_FILE, "r", encoding="utf-8") as f:
+                    for line in f:
+                        try:
+                            alerts_list.append(json.loads(line))
+                        except Exception:
+                            continue
+            alerts_list = list(reversed(alerts_list))
+        except Exception as e:
+            logging.warning(f"Failed to read alerts: {e}")
+        
+        # Build container stats
+        container_stats = []
+        cpu_total = 0
+        memory_total = 0
+        memory_limit_total = 0
+        running_count = 0
+        stopped_count = 0
+        
+        for container in containers_list:
+            try:
+                state = container.attrs.get("State", {})
+                status = "running" if state.get("Running") else "stopped"
+                if status == "running":
+                    running_count += 1
+                else:
+                    stopped_count += 1
+                    
+                # Try to get stats (only works for running containers)
+                cpu_percent = 0
+                memory_mb = 0
+                memory_limit_mb = 256  # Default fallback
+                
+                if state.get("Running"):
+                    try:
+                        stats = container.stats(stream=False)
+                        cpu_delta = stats["cpu_stats"]["cpu_usage"]["total_usage"] - stats["precpu_stats"].get("cpu_usage", {}).get("total_usage", 0)
+                        system_delta = stats["cpu_stats"]["system_cpu_usage"] - stats["precpu_stats"].get("system_cpu_usage", 0)
+                        cpu_percent = (cpu_delta / system_delta * 100) if system_delta > 0 else 0
+                        
+                        memory_mb = stats["memory_stats"].get("usage", 0) / (1024 * 1024)
+                        memory_limit_mb = stats["memory_stats"].get("limit", 256 * 1024 * 1024) / (1024 * 1024)
+                    except Exception as e:
+                        logging.debug(f"Could not get stats for {container.name}: {e}")
+                
+                cpu_total += cpu_percent
+                memory_total += memory_mb
+                memory_limit_total += memory_limit_mb
+                
+                container_stats.append({
+                    "id": container.id[:12],
+                    "name": container.name,
+                    "status": status,
+                    "image": container.image.tags[0] if container.image.tags else "unknown",
+                    "cpu": round(cpu_percent, 2),
+                    "memory": round(memory_mb, 2),
+                    "memoryLimit": round(memory_limit_mb, 2),
+                    "uptime": uptime,
+                    "network": {"rx": 0, "tx": 0}
+                })
+            except Exception as e:
+                logging.debug(f"Error processing container: {e}")
+                continue
+        
+        # Calculate alert statistics
+        critical_alerts = sum(1 for a in alerts_list if a.get("severity") == "critical")
+        high_alerts = sum(1 for a in alerts_list if a.get("severity") == "high")
+        unresolved_alerts = sum(1 for a in alerts_list if a.get("status") != "resolved")
+        
+        # Normalize alert timestamps for frontend
+        normalized_alerts = []
+        for alert in alerts_list[:10]:
+            alert = dict(alert)  # copy
+            alert["timestamp"] = alert.get("timestamp") or alert.get("log_time") or ""
+            normalized_alerts.append(alert)
+
+        # Build response
+        dashboard_data = {
+            "success": True,
+            "data": {
+                "summary": {
+                    "containers": {
+                        "total": len(containers_list),
+                        "running": running_count,
+                        "stopped": stopped_count,
+                    },
+                    "alerts": {
+                        "unresolved": unresolved_alerts,
+                        "critical": critical_alerts,
+                        "high": high_alerts,
+                    },
+                    "daemonStatus": {
+                        "status": "running" if docker_ok else "error",
+                        "uptime": uptime,
+                        "version": docker_info.get("Version", "unknown"),
+                    },
+                    "systemMetrics": {
+                        "cpu": {"usage": round(cpu_total / max(1, len(containers_list)), 2)},
+                        "memory": {
+                            "used": round(memory_total, 2),
+                            "limit": round(memory_limit_total, 2),
+                            "percentage": round((memory_total / max(1, memory_limit_total)) * 100, 2),
+                        },
+                    },
+                },
+                "recentAlerts": normalized_alerts,  # Last 10 alerts, normalized
+                "topContainers": sorted(container_stats, key=lambda x: x["cpu"], reverse=True)[:5],
+                "recentActivity": [
+                    {
+                        "id": f"activity-{i}",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "message": f"Container activity recorded",
+                    }
+                    for i in range(3)
+                ],
+            }
+        }
+        
+        return jsonify(dashboard_data), 200
+        
+    except Exception as e:
+        logging.exception(f"Dashboard endpoint error: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
 @app.route("/api/containers/<container_id>/stop", methods=["POST"])
 def stop_container(container_id):
     try:
@@ -294,5 +441,65 @@ def stop_container(container_id):
         return jsonify({"error": str(e)}), 500
    
 if __name__ == "__main__":
-    docker_thread()  # Start background Docker event listener
-    app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
+    # Start background Docker event listener
+    docker_thread()
+
+    # Run Flask
+    from werkzeug.serving import run_simple
+    run_simple("0.0.0.0", 8080, app, use_reloader=False)
+
+    
+    
+    
+    # if __name__ == "__main__":
+    # docker_thread()  # Start background Docker event listener
+    # app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
+    # import os
+# import sys
+# import json
+# import time
+# import logging
+# import threading
+# from datetime import datetime, timezone
+# from flask import Flask, request, jsonify
+# from flask_cors import CORS
+# import docker
+# from flask_swagger_ui import get_swaggerui_blueprint
+# from events import docker_thread
+# from utils import (
+#     persist_alert_line,
+#     enrich_with_inspect,
+#     trivy_scan_image,
+#     approvals_get,
+#     approvals_set,
+#     load_config,
+# )
+# os.environ["PYTHONUNBUFFERED"] = "1"
+# logging.basicConfig(
+#     level=logging.INFO,
+#     stream=sys.stdout,
+#     format="%(asctime)s %(levelname)s %(message)s"
+# )
+
+# SWAGGER_URL = "/docs"
+# API_URL = "/static/swagger.yaml"
+
+# start_time = time.time()
+
+# app = Flask(__name__)
+# CORS(app, resources={r"/api/*": {"origins": "*"}})
+# swaggerui_blueprint = get_swaggerui_blueprint(
+#     SWAGGER_URL,
+#     API_URL,
+#     config={ "app_name": "Docker Defense Daemon" }
+# )
+# app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
+
+# client = docker.from_env()
+# try:
+#     logging.info("Docker version: %s", client.version())
+# except Exception as e:
+#     logging.warning("Could not query Docker version: %s", e)
+
+# ALERTS_FILE = os.environ.get("ALERTS_FILE", "/app/alerts/alerts.jsonl")
+# os.makedirs(os.path.dirname(ALERTS_FILE), exist_ok=True)

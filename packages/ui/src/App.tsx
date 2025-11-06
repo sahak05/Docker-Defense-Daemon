@@ -9,7 +9,7 @@ import { SystemStatus } from "./pages/SystemStatus";
 import { Settings } from "./pages/Settings";
 
 /* Dashboard component kept in the ui package */
-import Dashboard from "./pages/Dashboard";
+import Dashboard from "./pages/dashboard/Dashboard";
 import { Toaster } from "./components/uiLibraries/sonner";
 import { useTheme } from "./hooks/useTheme";
 
@@ -39,7 +39,6 @@ export default function App() {
           <Dashboard
             onToggleDarkMode={toggleTheme}
             onNavigate={handleNavigate}
-            useMockData={true}
           />
         );
       case "containers":
@@ -58,7 +57,6 @@ export default function App() {
           <Dashboard
             onToggleDarkMode={toggleTheme}
             onNavigate={handleNavigate}
-            useMockData={true}
           />
         );
     }
