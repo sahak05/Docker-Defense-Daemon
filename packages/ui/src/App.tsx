@@ -1,82 +1,38 @@
-import { useState } from "react";
-
-/* App-level components (from this package) */
-import { DashboardLayout } from "./pages/DashboardLayout";
-import { ContainersPage } from "./pages/ContainersPage";
-import { AlertsCenter } from "./pages/AlertsCenter";
-import { EventLogs } from "./pages/EventLogs";
-import { SystemStatus } from "./pages/SystemStatus";
-import { Settings } from "./pages/Settings";
-
-/* Dashboard component kept in the ui package */
-import Dashboard from "./pages/Dashboard";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { DashboardLayout } from "./pages/components/DashboardLayout";
 import { Toaster } from "./components/uiLibraries/sonner";
 import { useTheme } from "./hooks/useTheme";
+import { routes, fallbackRoute } from "./routes";
 
-/* Optional: import shared styles / color tokens / font helpers from ui package
-   Uncomment and adapt paths if files exist at these locations:
-*/
-// import colorTokens from "../ui/src/assets/styles/color";
-// import { someUtil } from "../ui/src/utils/utils";
-// import "../ui/src/styles/font.css"; // or import font helpers
-
+/**
+ * App
+ *
+ * Main application component with React Router v6 integration
+ *
+ * - BrowserRouter enables client-side routing
+ * - Routes maps URL paths to page components
+ * - DashboardLayout wraps all pages with sidebar, header, etc.
+ * - Theme is managed via useTheme hook and passed to layout
+ */
 export default function App() {
   const { isDarkMode, toggle: toggleTheme } = useTheme();
 
-  // App navigation state
-  const [currentPage, setCurrentPage] = useState<string>("dashboard");
-
-  // Navigation handler (forwarded into DashboardLayout and Dashboard child)
-  const handleNavigate = (page: string) => {
-    setCurrentPage(page);
-  };
-
-  const renderPage = () => {
-    switch (currentPage) {
-      case "dashboard":
-        // Pass dark mode handler so Dashboard UI can show toggle and respond
-        return (
-          <Dashboard
-            onToggleDarkMode={toggleTheme}
-            onNavigate={handleNavigate}
-            useMockData={true}
-          />
-        );
-      case "containers":
-        return <ContainersPage />;
-      case "alerts":
-        // Components read theme via hook; don't prop-drill
-        return <AlertsCenter />;
-      case "events":
-        return <EventLogs />;
-      case "system":
-        return <SystemStatus />;
-      case "settings":
-        return <Settings />;
-      default:
-        return (
-          <Dashboard
-            onToggleDarkMode={toggleTheme}
-            onNavigate={handleNavigate}
-            useMockData={true}
-          />
-        );
-    }
-  };
-
   return (
-    <>
-      <DashboardLayout
-        currentPage={currentPage}
-        onNavigate={handleNavigate}
-        // DashboardLayout still accepts isDarkMode prop; forward hook values
-        isDarkMode={isDarkMode}
-        onToggleDarkMode={toggleTheme}
-      >
-        {renderPage()}
+    <BrowserRouter>
+      <DashboardLayout isDarkMode={isDarkMode} onToggleDarkMode={toggleTheme}>
+        <Routes>
+          {/* Map all configured routes */}
+          {routes.map((route) => (
+            <Route key={route.path} path={route.path} element={route.element} />
+          ))}
+
+          {/* 404 Fallback - redirects to dashboard */}
+          <Route path={fallbackRoute.path} element={fallbackRoute.element} />
+        </Routes>
       </DashboardLayout>
 
+      {/* Toast notifications */}
       <Toaster />
-    </>
+    </BrowserRouter>
   );
 }

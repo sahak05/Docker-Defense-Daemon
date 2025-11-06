@@ -94,6 +94,35 @@ export interface RecentActivity {
   severity?: "info" | "warning" | "error";
 }
 
+export interface ContainerAlert {
+  action: string;
+  id: string;
+  image: string;
+  log_time: string;
+  metadata: {
+    action: string;
+    capabilitiesAdded: string[];
+    environmentVariables: string[];
+    id: string;
+    image: string;
+    networks: string[];
+    privileged: boolean;
+    securityOptions: string[];
+    user: string;
+    volumesMounted: string[];
+  };
+  risks: {
+    description: string;
+    rule: string;
+    severity: "critical" | "high" | "medium" | "low";
+  }[];
+  trivy: {
+    count: number;
+    high_or_critical: number;
+    sample: any[];
+  };
+}
+
 // API Response types
 export interface ApiResponse<T> {
   success: boolean;
