@@ -137,3 +137,30 @@ export interface DashboardData {
   recentActivity: RecentActivity[];
   topContainers: ContainerStats[]; // Top 5 by resource usage
 }
+
+export interface SystemStatus {
+  hostInformation: {
+    operatingSystem: string;
+    kernelRelease: string;
+    architecture: string;
+    dockerVersion: string;
+    apiVersion: string;
+  };
+  systemResources: {
+    cpu: {
+      cores: number | string;
+      usagePercent: number | string;
+    };
+    memory: {
+      totalGb: number | string;
+      usedGb: number | string;
+      usagePercent: number | string;
+    };
+    disk: {
+      totalGb: number | string;
+      usedGb: number | string;
+      usagePercent: number | string;
+    };
+  };
+  timestamp: string;
+}

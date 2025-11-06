@@ -19,6 +19,10 @@ interface ContainerDetailsDialogProps {
   onClose: () => void;
   container: TransformedContainer | null;
   isDarkMode: boolean;
+  onStop?: () => Promise<void>;
+  onStart?: () => Promise<void>;
+  onRestart?: () => Promise<void>;
+  isLoading?: boolean;
 }
 
 export const ContainerDetailsDialog: React.FC<ContainerDetailsDialogProps> = ({
@@ -26,6 +30,10 @@ export const ContainerDetailsDialog: React.FC<ContainerDetailsDialogProps> = ({
   onClose,
   container,
   isDarkMode,
+  onStop,
+  onStart,
+  onRestart,
+  isLoading = false,
 }) => {
   const getStatusBadgeStyle = (status: string) => {
     const bg = utilGetStatusColor(status, isDarkMode ? "dark" : "light");
@@ -121,7 +129,8 @@ export const ContainerDetailsDialog: React.FC<ContainerDetailsDialogProps> = ({
             <Button
               variant="outline"
               size="sm"
-              disabled={container.status !== "running"}
+              disabled={container.status !== "running" || isLoading}
+              onClick={onStop}
             >
               <Square className="h-4 w-4 mr-2" />
               Stop
@@ -129,12 +138,18 @@ export const ContainerDetailsDialog: React.FC<ContainerDetailsDialogProps> = ({
             <Button
               variant="outline"
               size="sm"
-              disabled={container.status === "running"}
+              disabled={container.status === "running" || isLoading}
+              onClick={onStart}
             >
               <Play className="h-4 w-4 mr-2" />
               Start
             </Button>
-            <Button variant="outline" size="sm">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isLoading}
+              onClick={onRestart}
+            >
               <RotateCw className="h-4 w-4 mr-2" />
               Restart
             </Button>

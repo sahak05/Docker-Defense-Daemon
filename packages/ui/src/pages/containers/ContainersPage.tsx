@@ -5,6 +5,12 @@ import { Card, CardContent } from "../../components/uiLibraries/card";
 import { Button } from "../../components/uiLibraries/button";
 import { useContainersData } from "../../hooks/useContainersData";
 import { type TransformedContainer } from "../../utils/dashboard";
+import {
+  stopContainer,
+  startContainer,
+  restartContainer,
+} from "../../utils/dashboard";
+import { toast } from "sonner";
 
 import { ContainersSummary } from "./ContainersSummary";
 import { ContainersFilter } from "./ContainersFilter";
@@ -18,8 +24,62 @@ export const ContainersPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedContainer, setSelectedContainer] =
     useState<TransformedContainer | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const { containers, loading, error, refetch } = useContainersData(5000);
+  const { containers, loading, error, refetch } = useContainersData(); // Fetch once on mount, no auto-refresh
+
+  const handleStopContainer = async () => {
+    if (!selectedContainer) return;
+
+    setIsLoading(true);
+    try {
+      await stopContainer(selectedContainer.id);
+      toast.success(`Container ${selectedContainer.name} stopped successfully`);
+      setSelectedContainer(null);
+      refetch();
+    } catch (error) {
+      console.error("Failed to stop container:", error);
+      toast.error("Failed to stop container");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleStartContainer = async () => {
+    if (!selectedContainer) return;
+
+    setIsLoading(true);
+    try {
+      await startContainer(selectedContainer.id);
+      toast.success(`Container ${selectedContainer.name} started successfully`);
+      setSelectedContainer(null);
+      refetch();
+    } catch (error) {
+      console.error("Failed to start container:", error);
+      toast.error("Failed to start container");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRestartContainer = async () => {
+    if (!selectedContainer) return;
+
+    setIsLoading(true);
+    try {
+      await restartContainer(selectedContainer.id);
+      toast.success(
+        `Container ${selectedContainer.name} restarted successfully`
+      );
+      setSelectedContainer(null);
+      refetch();
+    } catch (error) {
+      console.error("Failed to restart container:", error);
+      toast.error("Failed to restart container");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Filter and memoize to prevent unnecessary re-renders
   const filteredContainers = useMemo(() => {
@@ -108,6 +168,10 @@ export const ContainersPage: React.FC = () => {
             onClose={() => setSelectedContainer(null)}
             container={selectedContainer}
             isDarkMode={isDarkMode}
+            onStop={handleStopContainer}
+            onStart={handleStartContainer}
+            onRestart={handleRestartContainer}
+            isLoading={isLoading}
           />
         </>
       )}

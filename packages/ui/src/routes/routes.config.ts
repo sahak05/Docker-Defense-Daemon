@@ -1,10 +1,11 @@
 import {
   LayoutDashboard,
-  Settings,
+  // Settings,
   AlertCircle,
   Container,
   Activity,
   ScrollText,
+  Shield,
 } from "lucide-react";
 import * as LazyComponents from "./lazyRoutes";
 import type { RouteConfig } from "./types";
@@ -57,13 +58,21 @@ export const routeConfig: RouteConfig[] = [
     component: LazyComponents.SystemStatus,
     description: "System health and metrics",
   },
+  // {
+  //   id: "settings",
+  //   path: "/settings",
+  //   label: "Settings",
+  //   icon: Settings,
+  //   component: LazyComponents.SettingsPage,
+  //   description: "Application settings",
+  // },
   {
-    id: "settings",
-    path: "/settings",
-    label: "Settings",
-    icon: Settings,
-    component: LazyComponents.SettingsPage,
-    description: "Application settings",
+    id: "approvals",
+    path: "/approvals",
+    label: "Image Approvals",
+    icon: Shield,
+    component: LazyComponents.ImageApprovalsPage,
+    description: "Manage image approvals",
   },
 ];
 
