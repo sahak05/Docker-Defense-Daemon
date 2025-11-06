@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { DashboardData } from "../types/dashboard";
 import { getDashboardData } from "../utils/dashboard";
+import { ensureUniqueIds } from "../utils/dataValidation";
 
 /**
  * useDashboardData hook
@@ -41,7 +42,15 @@ export const useDashboardData = () => {
         throw new Error(data?.error || "Failed to fetch dashboard data");
       }
 
-      setDashboardData(data.data);
+      // Ensure unique IDs for list items to prevent React key warnings
+      const cleanedData = {
+        ...data.data,
+        recentAlerts: ensureUniqueIds(data.data.recentAlerts || []),
+        topContainers: ensureUniqueIds(data.data.topContainers || []),
+        recentActivity: ensureUniqueIds(data.data.recentActivity || []),
+      };
+
+      setDashboardData(cleanedData);
       setError(null);
     } catch (err) {
       if (!isMountedRef.current) return;

@@ -1,7 +1,8 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useCallback } from "react";
 import styles from "./styles/dashboard.module.css";
 import { useDashboardData } from "../../hooks/useDashboardData";
 import { useThemeConfig } from "../../hooks/useThemeConfig";
+import { useAppNavigation } from "../../hooks/useAppNavigation";
 import {
   DashboardProvider,
   useDashboardContext,
@@ -18,7 +19,6 @@ import {
 interface DashboardProps {
   isDarkMode?: boolean;
   onToggleDarkMode?: () => void;
-  onNavigate?: (page: string, itemId?: string) => void;
 }
 
 /**
@@ -65,6 +65,7 @@ const DashboardContent: React.FC = () => {
  * Main component that:
  * - Fetches data via useDashboardData hook
  * - Manages theme configuration
+ * - Uses React Router navigation
  * - Sets up DashboardProvider for context
  * - Renders composed sub-components
  *
@@ -73,7 +74,6 @@ const DashboardContent: React.FC = () => {
 const Dashboard: React.FC<DashboardProps> = ({
   isDarkMode: propIsDarkMode,
   onToggleDarkMode,
-  onNavigate,
 }) => {
   // Data fetching
   const { dashboardData, loading, error } = useDashboardData();
@@ -81,8 +81,27 @@ const Dashboard: React.FC<DashboardProps> = ({
   // Theme configuration
   const { isDarkMode, toggleTheme } = useThemeConfig(propIsDarkMode);
 
+  // React Router navigation
+  const { toAlerts, toContainers } = useAppNavigation();
+
   const actualToggle = onToggleDarkMode ?? toggleTheme;
-  const actualNavigate = onNavigate ?? (() => {});
+
+  // Navigation callback that maps page names to routes
+  const handleNavigate = useCallback(
+    (page: string, _itemId?: string) => {
+      switch (page) {
+        case "alerts":
+          toAlerts();
+          break;
+        case "containers":
+          toContainers();
+          break;
+        default:
+          break;
+      }
+    },
+    [toAlerts, toContainers]
+  );
 
   // Memoize computed metrics
   const memoryPercentage = useMemo(() => {
@@ -97,7 +116,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       error={error}
       isDarkMode={isDarkMode}
       onToggleDarkMode={actualToggle}
-      onNavigate={actualNavigate}
+      onNavigate={handleNavigate}
       memoryPercentage={parseFloat(memoryPercentage)}
     >
       <div

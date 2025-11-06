@@ -1,6 +1,5 @@
-import React, { createContext, useContext, ReactNode } from "react";
+import React, { createContext, useContext } from "react";
 import type { DashboardData } from "../types/dashboard";
-import type { ContainerAlert } from "../types/containerAlert";
 
 /**
  * DashboardContext
@@ -36,7 +35,7 @@ const DashboardContext = createContext<DashboardContextType | undefined>(
 );
 
 interface DashboardProviderProps {
-  children: ReactNode;
+  children: React.ReactNode;
   dashboardData: DashboardData | null;
   loading: boolean;
   error: string | null;

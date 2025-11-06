@@ -16,6 +16,8 @@ from utils import (
     approvals_get,
     approvals_set,
     load_config,
+    generate_unique_id,
+    ensure_alert_has_id,
 )
 
 # --- Logging setup ---
@@ -227,6 +229,95 @@ def list_container_inspections():
         logging.exception("reading inspections failed")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/containers/list", methods=["GET", "OPTIONS"])
+def list_running_containers():
+    """
+    Returns real running containers with live stats.
+    Optional: include_all (bool) - include stopped containers
+    """
+    if request.method == "OPTIONS":
+        return "", 200
+    
+    try:
+        include_all = request.args.get("include_all", "false").lower() in ("1", "true", "yes")
+        containers_list = client.containers.list(all=include_all)
+        
+        result = []
+        for container in containers_list:
+            try:
+                # Get container stats - only for running containers
+                cpu_percent = 0.0
+                memory_usage = 0.0
+                memory_limit = 0.0
+                
+                if container.status == "running":
+                    try:
+                        stats = container.stats(stream=False)
+                        
+                        if "cpu_stats" in stats and "system_cpu_usage" in stats["cpu_stats"]:
+                            cpu_delta = stats["cpu_stats"]["cpu_usage"]["total_usage"] - stats["precpu_stats"]["cpu_usage"]["total_usage"]
+                            system_delta = stats["cpu_stats"]["system_cpu_usage"] - stats["precpu_stats"]["system_cpu_usage"]
+                            cpu_percent = (cpu_delta / system_delta) * 100.0 if system_delta > 0 else 0.0
+                        
+                        if "memory_stats" in stats:
+                            memory_usage = stats["memory_stats"].get("usage", 0) / (1024 ** 3)
+                            memory_limit = stats["memory_stats"].get("limit", 0) / (1024 ** 3)
+                    except Exception as stats_err:
+                        logging.debug(f"Could not get stats for {container.name}: {stats_err}")
+                
+                # Calculate uptime
+                start_time_str = container.attrs.get("State", {}).get("StartedAt", "")
+                uptime_str = "N/A"
+                if start_time_str:
+                    try:
+                        start = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
+                        now = datetime.now(timezone.utc)
+                        delta = now - start
+                        days = delta.days
+                        hours = delta.seconds // 3600
+                        minutes = (delta.seconds % 3600) // 60
+                        uptime_str = f"{days}d {hours}h {minutes}m"
+                    except:
+                        uptime_str = "N/A"
+                
+                result.append({
+                    "id": container.id[:12],
+                    "name": container.name,
+                    "image": container.image.tags[0] if container.image.tags else "unknown",
+                    "status": container.status,
+                    "uptime": uptime_str,
+                    "cpu": round(cpu_percent, 1),
+                    "memory": round(memory_usage, 2),
+                    "memory_limit": round(memory_limit, 2),
+                    "created": container.attrs.get("Created", ""),
+                    "last_event": container.attrs.get("State", {}).get("Status", "unknown"),
+                    "full_id": container.id
+                })
+            except Exception as e:
+                logging.warning(f"Error processing container {container.name}: {e}")
+                # Still add the container with minimal data
+                try:
+                    result.append({
+                        "id": container.id[:12],
+                        "name": container.name,
+                        "image": container.image.tags[0] if container.image.tags else "unknown",
+                        "status": container.status,
+                        "uptime": "N/A",
+                        "cpu": 0.0,
+                        "memory": 0.0,
+                        "memory_limit": 0.0,
+                        "created": container.attrs.get("Created", ""),
+                        "last_event": "stats unavailable",
+                        "full_id": container.id
+                    })
+                except:
+                    pass
+        
+        return jsonify(result), 200
+    except Exception as e:
+        logging.exception("Error listing containers")
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/daemon-status", methods=["GET"])
 def daemon_status():
     uptime = round(time.time() - start_time, 2)
@@ -360,7 +451,18 @@ def get_dashboard():
         for alert in alerts_list[:10]:
             alert = dict(alert)  # copy
             alert["timestamp"] = alert.get("timestamp") or alert.get("log_time") or ""
+            # Ensure unique ID
+            alert = ensure_alert_has_id(alert)
             normalized_alerts.append(alert)
+
+        # Build unique activity records with UUIDs
+        recent_activity = []
+        for i in range(3):
+            recent_activity.append({
+                "id": generate_unique_id(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "message": f"Container activity recorded",
+            })
 
         # Build response
         dashboard_data = {
@@ -391,16 +493,9 @@ def get_dashboard():
                         },
                     },
                 },
-                "recentAlerts": normalized_alerts,  # Last 10 alerts, normalized
+                "recentAlerts": normalized_alerts,  # Last 10 alerts, normalized with unique IDs
                 "topContainers": sorted(container_stats, key=lambda x: x["cpu"], reverse=True)[:5],
-                "recentActivity": [
-                    {
-                        "id": f"activity-{i}",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "message": f"Container activity recorded",
-                    }
-                    for i in range(3)
-                ],
+                "recentActivity": recent_activity,  # Recent activity with unique UUIDs
             }
         }
         
@@ -450,56 +545,3 @@ if __name__ == "__main__":
 
     
     
-    
-    # if __name__ == "__main__":
-    # docker_thread()  # Start background Docker event listener
-    # app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
-    # import os
-# import sys
-# import json
-# import time
-# import logging
-# import threading
-# from datetime import datetime, timezone
-# from flask import Flask, request, jsonify
-# from flask_cors import CORS
-# import docker
-# from flask_swagger_ui import get_swaggerui_blueprint
-# from events import docker_thread
-# from utils import (
-#     persist_alert_line,
-#     enrich_with_inspect,
-#     trivy_scan_image,
-#     approvals_get,
-#     approvals_set,
-#     load_config,
-# )
-# os.environ["PYTHONUNBUFFERED"] = "1"
-# logging.basicConfig(
-#     level=logging.INFO,
-#     stream=sys.stdout,
-#     format="%(asctime)s %(levelname)s %(message)s"
-# )
-
-# SWAGGER_URL = "/docs"
-# API_URL = "/static/swagger.yaml"
-
-# start_time = time.time()
-
-# app = Flask(__name__)
-# CORS(app, resources={r"/api/*": {"origins": "*"}})
-# swaggerui_blueprint = get_swaggerui_blueprint(
-#     SWAGGER_URL,
-#     API_URL,
-#     config={ "app_name": "Docker Defense Daemon" }
-# )
-# app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
-
-# client = docker.from_env()
-# try:
-#     logging.info("Docker version: %s", client.version())
-# except Exception as e:
-#     logging.warning("Could not query Docker version: %s", e)
-
-# ALERTS_FILE = os.environ.get("ALERTS_FILE", "/app/alerts/alerts.jsonl")
-# os.makedirs(os.path.dirname(ALERTS_FILE), exist_ok=True)

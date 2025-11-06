@@ -1,7 +1,5 @@
 import React from "react";
-import { Moon, Sun } from "lucide-react";
 import { useDashboardContext } from "../../../context/DashboardContext";
-import { getColor } from "../../../assets/styles/color";
 import styles from "../styles/dashboard.module.css";
 
 /**
@@ -14,7 +12,7 @@ import styles from "../styles/dashboard.module.css";
  */
 
 export const DashboardHeader: React.FC = () => {
-  const { isDarkMode, onToggleDarkMode, dashboardData } = useDashboardContext();
+  const { dashboardData } = useDashboardContext();
 
   if (!dashboardData) return null;
 
@@ -35,28 +33,6 @@ export const DashboardHeader: React.FC = () => {
           ></div>
           <span>Daemon {daemonStatus.status}</span>
         </div>
-
-        {/* Dark Mode Toggle */}
-        <button
-          onClick={onToggleDarkMode}
-          className={styles.themeToggle}
-          aria-label="Toggle theme"
-          style={{
-            border: "none",
-            background: "transparent",
-            cursor: "pointer",
-            marginLeft: "1rem",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {isDarkMode ? (
-            <Sun size={22} color={getColor("warning", "700", isDarkMode)} />
-          ) : (
-            <Moon size={22} color={getColor("neutral", "700", isDarkMode)} />
-          )}
-        </button>
       </div>
     </header>
   );

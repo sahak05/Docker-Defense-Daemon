@@ -6,6 +6,7 @@ import logging
 from datetime import datetime
 import yaml
 from datetime import datetime, timedelta
+import uuid
 
 _CONFIG = None
 _APPROVALS = {}    
@@ -21,6 +22,19 @@ def load_config(path="/app/config.yml"):
     except Exception:
         _CONFIG = {}
     return _CONFIG
+
+def generate_unique_id() -> str:
+    """Generate a unique ID using UUID v4."""
+    return str(uuid.uuid4())
+
+def ensure_alert_has_id(alert: dict) -> dict:
+    """
+    Ensure alert has a unique ID. If missing, generate one.
+    If ID exists but is not unique, a new one will be generated later at dashboard level.
+    """
+    if "id" not in alert or not alert.get("id"):
+        alert["id"] = generate_unique_id()
+    return alert
 
 def approvals_get(image_key: str):
     return _APPROVALS.get(image_key)
@@ -100,7 +114,7 @@ def retrieve_all_risks(cid, metadata, image, action):
         risks.append({
             "rule": "Runs as root",
             "severity": "medium",
-            "description": "No non-root user configured in contaciner."
+            "description": "No non-root user configured in container."
         })
 
     if secopt and any("seccomp=unconfined" in str(s) for s in secopt):

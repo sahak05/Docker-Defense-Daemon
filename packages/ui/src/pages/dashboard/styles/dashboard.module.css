@@ -1,34 +1,11 @@
 /* src/pages/Dashboard.module.css */
 
 .dashboard {
-  padding: 2rem;
+  /* padding: 2rem; */
   width: 100%;
   min-height: 100vh;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
-/* 
-.dashboard.light {
-  background-color: #f9fafb;
-  color: #171717;
-}
-
-.dashboard.dark {
-  background-color: #0a0a0a;
-  color: #fafafa;
-}
-.dashboard {
-  transition: background-color 0.3s ease, color 0.3s ease;
-} */
-
-/* .dashboard.light {
-  background-color: #ffffff;
-  color: #111;
-}
-
-.dashboard.dark {
-  background-color: #0f172a;
-  color: #f8fafc;
-} */
 
 /* Header */
 .header {
