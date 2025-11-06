@@ -32,7 +32,7 @@ export const AlertsCenter = React.lazy(() =>
 // System Status
 export const SystemStatus = React.lazy(() =>
   import("../pages/system-status/SystemStatus").then((module) => ({
-    default: module.SystemStatus,
+    default: module.SystemStatusPage,
   }))
 );
 
@@ -47,5 +47,12 @@ export const EventLogs = React.lazy(() =>
 export const SettingsPage = React.lazy(() =>
   import("../pages/settings/Settings").then((module) => ({
     default: module.Settings,
+  }))
+);
+
+// Image Approvals Page
+export const ImageApprovalsPage = React.lazy(() =>
+  import("../pages/approvals/ImageApprovals").then((module) => ({
+    default: module.ImageApprovals,
   }))
 );

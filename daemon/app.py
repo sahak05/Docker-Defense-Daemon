@@ -5,10 +5,11 @@ import time
 import logging
 import threading
 from datetime import datetime, timezone
+import platform
 import docker
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from events import docker_thread
+from events import docker_thread, get_events, add_event
 from utils import (
     persist_alert_line,
     enrich_with_inspect,
@@ -18,6 +19,8 @@ from utils import (
     load_config,
     generate_unique_id,
     ensure_alert_has_id,
+    deduplicate_alerts,
+    find_alert_by_id_or_base,
 )
 
 # --- Logging setup ---
@@ -65,10 +68,141 @@ def list_alerts():
                     rows.append(json.loads(line))
                 except Exception:
                     continue
-        rows = list(reversed(rows))[:limit]
+        rows = list(reversed(rows))
+        # Deduplicate alerts by ID to ensure frontend receives unique IDs
+        rows = deduplicate_alerts(rows)[:limit]
         return jsonify(rows), 200
     except Exception as e:
         logging.exception("reading alerts failed")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/events", methods=["GET", "OPTIONS"])
+def list_events():
+    """
+    Retrieve events from the in-memory events store.
+    
+    Query parameters:
+    - limit: Maximum number of events to return (default: 100, max: 1000)
+    - type: Filter by event type (optional)
+    - container: Filter by container name/ID (optional)
+    """
+    try:
+        limit = max(1, min(1000, int(request.args.get("limit", "100"))))
+        event_type = request.args.get("type", None)
+        container = request.args.get("container", None)
+        
+        events = get_events(limit=limit, event_type=event_type, container=container)
+        return jsonify(events), 200
+    except Exception as e:
+        logging.exception("reading events failed")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/alerts/<alert_id>/acknowledge", methods=["POST"])
+def acknowledge_alert(alert_id):
+    """
+    Acknowledge an alert by updating its status to 'acknowledged' in alerts.jsonl.
+    Also appends an audit line with the action.
+    
+    Handles both exact ID matches and deduplicated IDs (e.g., "id-1" finds "id").
+    """
+    try:
+        if not os.path.exists(ALERTS_FILE):
+            return jsonify({"error": "Alerts file not found"}), 404
+        
+        # Read all alerts
+        alerts = []
+        with open(ALERTS_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    alerts.append(json.loads(line))
+                except Exception:
+                    continue
+        
+        # Find alert by exact ID or by base ID (if deduplicated)
+        alert, alert_index = find_alert_by_id_or_base(alerts, alert_id)
+        
+        if alert is None:
+            logging.warning(f"Alert {alert_id} not found in alerts.jsonl")
+            return jsonify({"error": f"Alert {alert_id} not found"}), 404
+        
+        # Update the alert status
+        alert["status"] = "acknowledged"
+        alerts[alert_index] = alert
+        
+        # Write back updated alerts
+        with open(ALERTS_FILE, "w", encoding="utf-8") as f:
+            for a in alerts:
+                f.write(json.dumps(a) + "\n")
+        
+        # Append audit line
+        audit_entry = {
+            "alert_id": alert_id,
+            "original_id": alert.get("id"),
+            "action": "acknowledged",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "source": "api"
+        }
+        with open(ALERTS_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(audit_entry) + "\n")
+        
+        logging.info(f"Alert {alert_id} acknowledged (original_id: {alert.get('id')})")
+        return jsonify({"status": "acknowledged", "alert_id": alert_id}), 200
+    except Exception as e:
+        logging.exception(f"Failed to acknowledge alert {alert_id}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/alerts/<alert_id>/resolve", methods=["POST"])
+def resolve_alert(alert_id):
+    """
+    Resolve an alert by updating its status to 'resolved' in alerts.jsonl.
+    Also appends an audit line with the action.
+    
+    Handles both exact ID matches and deduplicated IDs (e.g., "id-1" finds "id").
+    """
+    try:
+        if not os.path.exists(ALERTS_FILE):
+            return jsonify({"error": "Alerts file not found"}), 404
+        
+        # Read all alerts
+        alerts = []
+        with open(ALERTS_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    alerts.append(json.loads(line))
+                except Exception:
+                    continue
+        
+        # Find alert by exact ID or by base ID (if deduplicated)
+        alert, alert_index = find_alert_by_id_or_base(alerts, alert_id)
+        
+        if alert is None:
+            logging.warning(f"Alert {alert_id} not found in alerts.jsonl")
+            return jsonify({"error": f"Alert {alert_id} not found"}), 404
+        
+        # Update the alert status
+        alert["status"] = "resolved"
+        alerts[alert_index] = alert
+        
+        # Write back updated alerts
+        with open(ALERTS_FILE, "w", encoding="utf-8") as f:
+            for a in alerts:
+                f.write(json.dumps(a) + "\n")
+        
+        # Append audit line
+        audit_entry = {
+            "alert_id": alert_id,
+            "original_id": alert.get("id"),
+            "action": "resolved",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "source": "api"
+        }
+        with open(ALERTS_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(audit_entry) + "\n")
+        
+        logging.info(f"Alert {alert_id} resolved (original_id: {alert.get('id')})")
+        return jsonify({"status": "resolved", "alert_id": alert_id}), 200
+    except Exception as e:
+        logging.exception(f"Failed to resolve alert {alert_id}")
         return jsonify({"error": str(e)}), 500
 
 def process_falco_alert(payload):
@@ -351,6 +485,90 @@ def daemon_status():
 
     return jsonify(status), 200
 
+@app.route("/api/system-status", methods=["GET"])
+def system_status():
+    """
+    System status endpoint returning host information and system resources.
+    Includes OS info, Docker version, CPU, memory, and disk usage.
+    """
+    try:
+        # Get Docker client and info
+        client = docker.from_env()
+        docker_info = client.version()
+        
+        # Get system information
+        system_info = platform.system()
+        release = platform.release()
+        architecture = platform.machine()
+        
+        # Get CPU and memory information
+        try:
+            import psutil
+            cpu_count = psutil.cpu_count(logical=False) or psutil.cpu_count()
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            
+            mem = psutil.virtual_memory()
+            memory_total = round(mem.total / (1024**3), 2)  # Convert to GB
+            memory_used = round(mem.used / (1024**3), 2)
+            memory_percent = mem.percent
+            
+            disk = psutil.disk_usage('/')
+            disk_total = round(disk.total / (1024**3), 2)  # Convert to GB
+            disk_used = round(disk.used / (1024**3), 2)
+            disk_percent = disk.percent
+        except ImportError:
+            # psutil not available, return N/A
+            cpu_count = "N/A"
+            cpu_percent = "N/A"
+            memory_total = "N/A"
+            memory_used = "N/A"
+            memory_percent = "N/A"
+            disk_total = "N/A"
+            disk_used = "N/A"
+            disk_percent = "N/A"
+        except Exception as e:
+            logging.warning(f"Error getting system metrics: {e}")
+            cpu_count = "error"
+            cpu_percent = "error"
+            memory_total = "error"
+            memory_used = "error"
+            memory_percent = "error"
+            disk_total = "error"
+            disk_used = "error"
+            disk_percent = "error"
+        
+        status = {
+            "host_information": {
+                "operating_system": system_info,
+                "kernel_release": release,
+                "architecture": architecture,
+                "docker_version": docker_info.get("Version", "unknown"),
+                "api_version": docker_info.get("ApiVersion", "unknown"),
+            },
+            "system_resources": {
+                "cpu": {
+                    "cores": cpu_count,
+                    "usage_percent": cpu_percent,
+                },
+                "memory": {
+                    "total_gb": memory_total,
+                    "used_gb": memory_used,
+                    "usage_percent": memory_percent,
+                },
+                "disk": {
+                    "total_gb": disk_total,
+                    "used_gb": disk_used,
+                    "usage_percent": disk_percent,
+                },
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        
+        return jsonify(status), 200
+    except Exception as e:
+        logging.exception("Error getting system status")
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/dashboard", methods=["GET"])
 def get_dashboard():
     """
@@ -385,6 +603,8 @@ def get_dashboard():
                         except Exception:
                             continue
             alerts_list = list(reversed(alerts_list))
+            # Deduplicate alerts by ID to prevent frontend from seeing duplicates
+            alerts_list = deduplicate_alerts(alerts_list)
         except Exception as e:
             logging.warning(f"Failed to read alerts: {e}")
         
@@ -528,6 +748,62 @@ def stop_container(container_id):
             "name": container.name,
             "image": container.image.tags,
             "message": f"Container {container.short_id} stopped successfully."
+        }), 200
+
+    except docker.errors.APIError as e:
+        return jsonify({"error": f"Docker API error: {e.explanation}"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/containers/<container_id>/start", methods=["POST"])
+def start_container(container_id):
+    try:
+        client.version()
+        container = None
+        for c in client.containers.list(all=True):
+            if c.id.startswith(container_id):
+                container = c
+                break
+
+        if not container:
+            return jsonify({"error": f"No container found with ID starting {container_id}"}), 404
+
+        # Start the container
+        container.start()
+        return jsonify({
+            "status": "started",
+            "id": container.short_id,
+            "name": container.name,
+            "image": container.image.tags,
+            "message": f"Container {container.short_id} started successfully."
+        }), 200
+
+    except docker.errors.APIError as e:
+        return jsonify({"error": f"Docker API error: {e.explanation}"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/containers/<container_id>/restart", methods=["POST"])
+def restart_container(container_id):
+    try:
+        client.version()
+        container = None
+        for c in client.containers.list(all=True):
+            if c.id.startswith(container_id):
+                container = c
+                break
+
+        if not container:
+            return jsonify({"error": f"No container found with ID starting {container_id}"}), 404
+
+        # Restart the container
+        container.restart(timeout=5)
+        return jsonify({
+            "status": "restarted",
+            "id": container.short_id,
+            "name": container.name,
+            "image": container.image.tags,
+            "message": f"Container {container.short_id} restarted successfully."
         }), 200
 
     except docker.errors.APIError as e:

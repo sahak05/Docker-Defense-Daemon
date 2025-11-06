@@ -2,7 +2,7 @@
 
 ## What Was Done
 
-Implemented **route-level code-splitting** to make your app load 40-50% faster.
+Implemented **route-level code-splitting** to make the app load 40-50% faster.
 
 ### The Idea in 30 Seconds
 
@@ -32,7 +32,7 @@ Instead of loading ALL pages when the app starts, we now load:
 
 ## How to Use
 
-### No Changes Required for Users!
+### No Changes Required for Users
 
 The app works exactly the same - just faster.
 

@@ -10,6 +10,7 @@ import { Card, CardContent } from "../../components/uiLibraries/card";
 import { Button } from "../../components/uiLibraries/button";
 import type { TransformedAlert } from "../../utils/dashboard";
 import { useAlertsData } from "../../hooks/useAlertsData";
+import { acknowledgeAlert, resolveAlert } from "../../utils/dashboard";
 import { toast } from "sonner";
 
 /* Sub-components */
@@ -24,13 +25,14 @@ import { useTheme } from "../../hooks/useTheme";
 
 export const AlertsCenter: React.FC = () => {
   const { isDarkMode } = useTheme();
-  const { alerts, loading, error, refetch } = useAlertsData(5000); // Auto-refresh every 5 seconds
+  const { alerts, loading, error, refetch } = useAlertsData(); // Fetch once on mount, no auto-refresh
   const [searchTerm, setSearchTerm] = useState("");
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedAlert, setSelectedAlert] = useState<TransformedAlert | null>(
     null
   );
+  const [isLoading, setIsLoading] = useState(false);
 
   const filteredAlerts = useMemo(() => {
     return alerts.filter((alert) => {
@@ -127,14 +129,38 @@ export const AlertsCenter: React.FC = () => {
     }
   };
 
-  const handleAcknowledge = () => {
-    toast.success("Alert acknowledged");
-    setSelectedAlert(null);
+  const handleAcknowledge = async () => {
+    if (!selectedAlert) return;
+
+    setIsLoading(true);
+    try {
+      await acknowledgeAlert(selectedAlert.id);
+      toast.success("Alert acknowledged successfully");
+      setSelectedAlert(null);
+      refetch(); // Refresh the alerts list
+    } catch (error) {
+      console.error("Failed to acknowledge alert:", error);
+      toast.error("Failed to acknowledge alert");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleResolve = () => {
-    toast.success("Alert marked as resolved");
-    setSelectedAlert(null);
+  const handleResolve = async () => {
+    if (!selectedAlert) return;
+
+    setIsLoading(true);
+    try {
+      await resolveAlert(selectedAlert.id);
+      toast.success("Alert marked as resolved");
+      setSelectedAlert(null);
+      refetch(); // Refresh the alerts list
+    } catch (error) {
+      console.error("Failed to resolve alert:", error);
+      toast.error("Failed to resolve alert");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -159,12 +185,12 @@ export const AlertsCenter: React.FC = () => {
         <Card className="border-red-500">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
-              <XCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <XCircle className="h-5 w-5 text-text-error shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold text-red-600">
+                <p className="font-semibold text-text-error">
                   Error loading alerts
                 </p>
-                <p className="text-sm text-red-500">{error}</p>
+                <p className="text-sm text-text-error">{error}</p>
                 <Button
                   size="sm"
                   variant="outline"
@@ -210,6 +236,7 @@ export const AlertsCenter: React.FC = () => {
         onResolve={handleResolve}
         getSeverityStyle={getSeverityStyle}
         getAlertStatusStyle={getAlertStatusStyle}
+        isLoading={isLoading}
       />
     </div>
   );

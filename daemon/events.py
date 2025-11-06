@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from utils import trivy_scan_image
 
-from utils import retrieve_all_risks, persist_alert
+from utils import retrieve_all_risks, persist_alert, generate_unique_id
 RED = "\033[91m"
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
@@ -17,6 +17,71 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
 ALERTS_FILE = "/app/alerts/alerts.jsonl"
+
+# In-memory events storage (persists during daemon runtime)
+events_store = []
+events_lock = threading.Lock()
+MAX_EVENTS = 1000  # Keep last 1000 events
+
+
+def add_event(event_type: str, message: str, container: str = None, details: str = None):
+    """
+    Add an event to the in-memory events store.
+    
+    Args:
+        event_type: Type of event (e.g., "Container Started", "Alert Created", "Health Check")
+        message: Human-readable message
+        container: Optional container name/ID
+        details: Optional detailed information
+    """
+    global events_store
+    
+    event = {
+        "id": generate_unique_id(),
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "type": event_type,
+        "message": message,
+    }
+    
+    if container:
+        event["container"] = container
+    
+    if details:
+        event["details"] = details
+    
+    with events_lock:
+        events_store.insert(0, event)  # Insert at beginning (newest first)
+        # Keep only last MAX_EVENTS
+        if len(events_store) > MAX_EVENTS:
+            events_store = events_store[:MAX_EVENTS]
+
+
+def get_events(limit: int = 100, event_type: str = None, container: str = None):
+    """
+    Retrieve events from the in-memory store with optional filtering.
+    
+    Args:
+        limit: Maximum number of events to return
+        event_type: Filter by event type
+        container: Filter by container name/ID
+    
+    Returns:
+        List of events matching criteria
+    """
+    global events_store
+    
+    with events_lock:
+        results = list(events_store)
+    
+    # Apply filters
+    if event_type:
+        results = [e for e in results if e.get("type") == event_type]
+    
+    if container:
+        results = [e for e in results if e.get("container") == container]
+    
+    # Return limited results
+    return results[:limit]
 
 
 def run_trivy_scan(image_name: str):
@@ -87,6 +152,7 @@ def docker_event_listener():
             cid = (event.get("id") or "")[:12]
             attrs = event.get("Actor", {}).get("Attributes", {}) or {}
             image_ref = attrs.get("image", "") or attrs.get("image.name", "")
+            container_name = attrs.get("name", "") or cid
             metadata = {}
             try:
                 metadata = client.api.inspect_container(cid)
@@ -133,6 +199,29 @@ def docker_event_listener():
                 risks_mapping["trivy"] = trivy_summary or {"count":0}
 
             persist_alert(risks_mapping, "/app/alerts/alerts.jsonl")
+            
+            # Track event based on action
+            if action == "start":
+                add_event(
+                    "Container Started",
+                    f"Container {container_name} started successfully",
+                    container=container_name,
+                    details=f"Image: {image_ref}"
+                )
+            elif action == "restart":
+                add_event(
+                    "Container Restarted",
+                    f"Container {container_name} restarted",
+                    container=container_name,
+                    details=f"Image: {image_ref}"
+                )
+            elif action == "create":
+                add_event(
+                    "Container Created",
+                    f"Container {container_name} created",
+                    container=container_name,
+                    details=f"Image: {image_ref}"
+                )
 
             risks = risks_mapping.get("risks") or []
             if risks:

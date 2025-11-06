@@ -1,5 +1,9 @@
 // src/utils/dashboard.ts
-import type { ApiResponse, DashboardData } from "../types/dashboard";
+import type {
+  ApiResponse,
+  DashboardData,
+  SystemStatus,
+} from "../types/dashboard";
 import { apiFetch } from "./apiClient";
 
 export async function getDashboardData(): Promise<ApiResponse<DashboardData>> {
@@ -33,6 +37,30 @@ export async function getContainers() {
     return transformBackendContainers(rawContainers);
   } catch (error) {
     console.error("Error fetching containers:", error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch events from backend and transform to frontend format
+ */
+export async function getEvents(
+  limit?: number,
+  eventType?: string,
+  container?: string
+) {
+  try {
+    const params = new URLSearchParams();
+    if (limit) params.append("limit", limit.toString());
+    if (eventType) params.append("type", eventType);
+    if (container) params.append("container", container);
+
+    const queryString = params.toString();
+    const endpoint = queryString ? `/events?${queryString}` : "/events";
+    const rawEvents = await apiFetch<any[]>(endpoint);
+    return transformBackendEvents(rawEvents);
+  } catch (error) {
+    console.error("Error fetching events:", error);
     throw error;
   }
 }
@@ -147,6 +175,33 @@ export interface TransformedAlert {
   suggestedAction?: string;
 }
 
+export interface TransformedEvent {
+  id: string;
+  timestamp: string;
+  type: string;
+  message: string;
+  container?: string;
+  details?: string;
+}
+
+/**
+ * Transform backend event format to frontend format
+ */
+export function transformBackendEvents(
+  backendEvents: any[]
+): TransformedEvent[] {
+  if (!Array.isArray(backendEvents)) return [];
+
+  return backendEvents.map((event) => ({
+    id: event.id || generateId(),
+    timestamp: event.timestamp || new Date().toISOString(),
+    type: event.type || "Unknown Event",
+    message: event.message || "No message provided",
+    container: event.container || undefined,
+    details: event.details || undefined,
+  }));
+}
+
 /**
  * Map backend severity levels to frontend format
  */
@@ -217,4 +272,257 @@ function getDefaultSuggestedAction(severity: string): string {
  */
 function generateId(): string {
   return `alert-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/**
+ * Acknowledge an alert
+ */
+export async function acknowledgeAlert(alertId: string): Promise<{
+  status: string;
+  alert_id: string;
+}> {
+  try {
+    const response = await apiFetch<{
+      status: string;
+      alert_id: string;
+    }>(`/alerts/${alertId}/acknowledge`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    return response;
+  } catch (error) {
+    console.error(`Error acknowledging alert ${alertId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Resolve an alert
+ */
+export async function resolveAlert(alertId: string): Promise<{
+  status: string;
+  alert_id: string;
+}> {
+  try {
+    const response = await apiFetch<{
+      status: string;
+      alert_id: string;
+    }>(`/alerts/${alertId}/resolve`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    return response;
+  } catch (error) {
+    console.error(`Error resolving alert ${alertId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Stop a container
+ */
+export async function stopContainer(containerId: string): Promise<{
+  status: string;
+  id: string;
+  name: string;
+  image: string[];
+  message: string;
+}> {
+  try {
+    const response = await apiFetch<{
+      status: string;
+      id: string;
+      name: string;
+      image: string[];
+      message: string;
+    }>(`/containers/${containerId}/stop`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    return response;
+  } catch (error) {
+    console.error(`Error stopping container ${containerId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Start a container
+ */
+export async function startContainer(containerId: string): Promise<{
+  status: string;
+  id: string;
+  name: string;
+  image: string[];
+  message: string;
+}> {
+  try {
+    const response = await apiFetch<{
+      status: string;
+      id: string;
+      name: string;
+      image: string[];
+      message: string;
+    }>(`/containers/${containerId}/start`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    return response;
+  } catch (error) {
+    console.error(`Error starting container ${containerId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Restart a container
+ */
+export async function restartContainer(containerId: string): Promise<{
+  status: string;
+  id: string;
+  name: string;
+  image: string[];
+  message: string;
+}> {
+  try {
+    const response = await apiFetch<{
+      status: string;
+      id: string;
+      name: string;
+      image: string[];
+      message: string;
+    }>(`/containers/${containerId}/restart`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    return response;
+  } catch (error) {
+    console.error(`Error restarting container ${containerId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Get image approval status
+ */
+export async function getImageApprovalStatus(imageKey: string): Promise<{
+  approved: boolean;
+}> {
+  try {
+    const response = await apiFetch<{
+      approved: boolean;
+    }>(`/approvals/${encodeURIComponent(imageKey)}`, {
+      method: "GET",
+    });
+    return response;
+  } catch (error) {
+    console.error(`Error fetching approval status for ${imageKey}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Approve an image
+ */
+export async function approveImage(imageKey: string): Promise<{
+  status: string;
+  approved: boolean;
+}> {
+  try {
+    const response = await apiFetch<{
+      status: string;
+      approved: boolean;
+    }>(`/approvals/${encodeURIComponent(imageKey)}/approve`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    return response;
+  } catch (error) {
+    console.error(`Error approving image ${imageKey}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Deny an image
+ */
+export async function denyImage(imageKey: string): Promise<{
+  status: string;
+  approved: boolean;
+}> {
+  try {
+    const response = await apiFetch<{
+      status: string;
+      approved: boolean;
+    }>(`/approvals/${encodeURIComponent(imageKey)}/deny`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    return response;
+  } catch (error) {
+    console.error(`Error denying image ${imageKey}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Get system status including host information and system resources
+ * Transforms backend snake_case response to frontend camelCase format
+ */
+export async function getSystemStatus(): Promise<SystemStatus> {
+  try {
+    const response = await apiFetch<any>("/system-status", {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    // Transform snake_case from backend to camelCase for frontend
+    const transformed: SystemStatus = {
+      hostInformation: {
+        operatingSystem: response.host_information?.operating_system || "N/A",
+        kernelRelease: response.host_information?.kernel_release || "N/A",
+        architecture: response.host_information?.architecture || "N/A",
+        dockerVersion: response.host_information?.docker_version || "N/A",
+        apiVersion: response.host_information?.api_version || "N/A",
+      },
+      systemResources: {
+        cpu: {
+          cores: response.system_resources?.cpu?.cores || "N/A",
+          usagePercent: response.system_resources?.cpu?.usage_percent || 0,
+        },
+        memory: {
+          totalGb: response.system_resources?.memory?.total_gb || "N/A",
+          usedGb: response.system_resources?.memory?.used_gb || "N/A",
+          usagePercent: response.system_resources?.memory?.usage_percent || 0,
+        },
+        disk: {
+          totalGb: response.system_resources?.disk?.total_gb || "N/A",
+          usedGb: response.system_resources?.disk?.used_gb || "N/A",
+          usagePercent: response.system_resources?.disk?.usage_percent || 0,
+        },
+      },
+      timestamp: response.timestamp || new Date().toISOString(),
+    };
+
+    return transformed;
+  } catch (error) {
+    console.error("Error fetching system status:", error);
+    throw error;
+  }
 }
