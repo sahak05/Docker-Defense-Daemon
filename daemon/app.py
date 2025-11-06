@@ -569,6 +569,57 @@ def system_status():
         logging.exception("Error getting system status")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/docker-daemon", methods=["GET"])
+def docker_daemon_info():
+    """
+    Docker daemon information endpoint.
+    Returns images, volumes, and networks information.
+    """
+    try:
+        client = docker.from_env()
+        
+        # Get images
+        images = client.images.list()
+        total_images = len(images)
+        images_size = 0
+        for img in images:
+            try:
+                images_size += img.attrs.get("Size", 0)
+            except Exception:
+                pass
+        images_size_gb = round(images_size / (1024**3), 2)
+        
+        # Get volumes
+        volumes = client.volumes.list()
+        total_volumes = len(volumes)
+        
+        # Get networks
+        networks = client.networks.list()
+        total_networks = len(networks)
+        bridge_count = sum(1 for n in networks if n.attrs.get("Driver") == "bridge")
+        custom_count = total_networks - bridge_count
+        
+        daemon_info = {
+            "images": {
+                "total": total_images,
+                "size_gb": images_size_gb,
+            },
+            "volumes": {
+                "total": total_volumes,
+            },
+            "networks": {
+                "total": total_networks,
+                "bridge": bridge_count,
+                "custom": custom_count,
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        
+        return jsonify(daemon_info), 200
+    except Exception as e:
+        logging.exception("Error getting Docker daemon info")
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/dashboard", methods=["GET"])
 def get_dashboard():
     """

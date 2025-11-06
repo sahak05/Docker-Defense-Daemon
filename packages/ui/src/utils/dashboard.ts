@@ -526,3 +526,42 @@ export async function getSystemStatus(): Promise<SystemStatus> {
     throw error;
   }
 }
+
+/**
+ * Get Docker daemon information including images, volumes, and networks
+ */
+export async function getDockerDaemonInfo(): Promise<{
+  images: { total: number; sizeGb: number };
+  volumes: { total: number };
+  networks: { total: number; bridge: number; custom: number };
+  timestamp: string;
+}> {
+  try {
+    const response = await apiFetch<any>("/docker-daemon", {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    // Transform snake_case from backend to camelCase for frontend
+    return {
+      images: {
+        total: response.images?.total || 0,
+        sizeGb: response.images?.size_gb || 0,
+      },
+      volumes: {
+        total: response.volumes?.total || 0,
+      },
+      networks: {
+        total: response.networks?.total || 0,
+        bridge: response.networks?.bridge || 0,
+        custom: response.networks?.custom || 0,
+      },
+      timestamp: response.timestamp || new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error("Error fetching Docker daemon info:", error);
+    throw error;
+  }
+}
