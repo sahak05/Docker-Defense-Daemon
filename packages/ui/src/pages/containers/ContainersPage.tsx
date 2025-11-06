@@ -10,6 +10,7 @@ import { ContainersSummary } from "./ContainersSummary";
 import { ContainersFilter } from "./ContainersFilter";
 import { ContainersTable } from "./ContainersTable";
 import { ContainerDetailsDialog } from "./ContainerDetailsDialog";
+import { ContainersLoadingSkeleton } from "./ContainersLoadingSkeleton";
 
 export const ContainersPage: React.FC = () => {
   const { isDarkMode } = useTheme();
@@ -55,15 +56,15 @@ export const ContainersPage: React.FC = () => {
 
       {/* Error State */}
       {error && (
-        <Card className="border-red-500">
+        <Card className="border-error">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
-              <XCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <XCircle className="h-5 w-5 text-text-error shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold text-red-600">
+                <p className="font-semibold text-text-error">
                   Error loading containers
                 </p>
-                <p className="text-sm text-red-500">{error}</p>
+                <p className="text-sm text-text-error">{error}</p>
                 <Button
                   size="sm"
                   variant="outline"
@@ -78,31 +79,38 @@ export const ContainersPage: React.FC = () => {
         </Card>
       )}
 
-      {/* Summary Cards */}
-      <ContainersSummary containers={containers} />
+      {/* Loading State */}
+      {loading && containers.length === 0 ? (
+        <ContainersLoadingSkeleton />
+      ) : (
+        <>
+          {/* Summary Cards */}
+          <ContainersSummary containers={containers} />
 
-      {/* Filters */}
-      <ContainersFilter
-        searchTerm={searchTerm}
-        onSearchChange={setSearchTerm}
-        statusFilter={statusFilter}
-        onStatusFilterChange={setStatusFilter}
-      />
+          {/* Filters */}
+          <ContainersFilter
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+          />
 
-      {/* Table */}
-      <ContainersTable
-        containers={filteredContainers}
-        isDarkMode={isDarkMode}
-        onSelectContainer={setSelectedContainer}
-      />
+          {/* Table */}
+          <ContainersTable
+            containers={filteredContainers}
+            isDarkMode={isDarkMode}
+            onSelectContainer={setSelectedContainer}
+          />
 
-      {/* Details Dialog */}
-      <ContainerDetailsDialog
-        isOpen={!!selectedContainer}
-        onClose={() => setSelectedContainer(null)}
-        container={selectedContainer}
-        isDarkMode={isDarkMode}
-      />
+          {/* Details Dialog */}
+          <ContainerDetailsDialog
+            isOpen={!!selectedContainer}
+            onClose={() => setSelectedContainer(null)}
+            container={selectedContainer}
+            isDarkMode={isDarkMode}
+          />
+        </>
+      )}
     </div>
   );
 };
