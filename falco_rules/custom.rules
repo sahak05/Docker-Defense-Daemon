@@ -14,6 +14,8 @@ rules:
       Interactive shell in container (container=%container.id user=%user.name shell=%proc.name cmdline=%proc.cmdline)
     priority: WARNING
     tags: [container, shell_activity]
+    rate: 1 per 30s
+    skip-if-duplicate: true
 
   - rule: Read sensitive file
     desc: Someone is reading sensitive files like /etc/shadow or /etc/passwd
@@ -22,6 +24,8 @@ rules:
       Sensitive file read (command=%proc.cmdline file=%fd.name user=%user.name)
     priority: WARNING
     tags: [filesystem, mitre_discovery]
+    rate: 1 per 30s
+    skip-if-duplicate: true
 
   - rule: Outbound connection from container
     desc: Detects outbound internet connections from a container
@@ -30,6 +34,8 @@ rules:
       Outbound connection from container (container=%container.id command=%proc.cmdline ip=%fd.sip port=%fd.sport)
     priority: NOTICE
     tags: [network, container, mitre_exfiltration]
+    rate: 1 per 30s
+    skip-if-duplicate: true
 
   - rule: Package manager activity in container
     desc: Detects use of package managers inside containers
@@ -38,6 +44,8 @@ rules:
       Package manager used inside container (container=%container.id user=%user.name command=%proc.cmdline)
     priority: WARNING
     tags: [container, package_mgmt, mitre_persistence]
+    rate: 1 per 30s
+    skip-if-duplicate: true
 
   - rule: Ptrace syscall used
     desc: Detect usage of ptrace which may indicate debugging or process injection
@@ -62,9 +70,3 @@ rules:
       Root user ran unknown binary (cmd=%proc.cmdline path=%proc.exepath)
     priority: CRITICAL
     tags: [privilege, root_activity]
-
-http_output:
-  enabled: true
-  url: "http://daemon-defense:8080/api/falco-alert"
-  method: POST
-  insecure: true

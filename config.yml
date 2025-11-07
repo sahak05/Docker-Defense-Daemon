@@ -11,6 +11,6 @@ gate:
 
 falco:
   auto_stop_on_rules:
-    - "Terminal shell in container"
-    - "Cat etc passwd"
+    - "Interactive shell in container"
+    - "Read sensitive file"
   stop_grace_seconds: 5
