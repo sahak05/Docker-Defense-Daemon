@@ -7,6 +7,7 @@ import threading
 from datetime import datetime, timezone
 import platform
 import docker
+from docker.errors import APIError
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from events import docker_thread, get_events, add_event
@@ -752,7 +753,7 @@ def stop_container(container_id):
             "message": f"Container {container.short_id} stopped successfully."
         }), 200
 
-    except docker.errors.APIError as e:
+    except APIError as e:
         return jsonify({"error": f"Docker API error: {e.explanation}"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -780,7 +781,7 @@ def start_container(container_id):
             "message": f"Container {container.short_id} started successfully."
         }), 200
 
-    except docker.errors.APIError as e:
+    except APIError as e:
         return jsonify({"error": f"Docker API error: {e.explanation}"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -808,7 +809,7 @@ def restart_container(container_id):
             "message": f"Container {container.short_id} restarted successfully."
         }), 200
 
-    except docker.errors.APIError as e:
+    except APIError as e:
         return jsonify({"error": f"Docker API error: {e.explanation}"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
