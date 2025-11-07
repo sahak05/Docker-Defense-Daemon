@@ -6,6 +6,7 @@ import logging
 from datetime import datetime
 import yaml
 from datetime import datetime, timedelta
+import uuid
 
 _CONFIG = None
 _APPROVALS = {}    
@@ -21,6 +22,64 @@ def load_config(path="/app/config.yml"):
     except Exception:
         _CONFIG = {}
     return _CONFIG
+
+def generate_unique_id() -> str:
+    """Generate a unique ID using UUID v4."""
+    return str(uuid.uuid4())
+
+def ensure_alert_has_id(alert: dict) -> dict:
+    """
+    Ensure alert has a unique ID. If missing, generate one.
+    If ID exists but is not unique, a new one will be generated later at dashboard level.
+    """
+    if "id" not in alert or not alert.get("id"):
+        alert["id"] = generate_unique_id()
+    return alert
+
+def deduplicate_alerts(alerts: list) -> list:
+    """
+    Deduplicate alerts by ID, keeping the first occurrence.
+    This prevents duplicate alerts from being returned to the frontend.
+    """
+    seen = set()
+    unique_alerts = []
+    for alert in alerts:
+        alert_id = alert.get("id")
+        if alert_id and alert_id not in seen:
+            seen.add(alert_id)
+            unique_alerts.append(alert)
+        elif not alert_id:
+            # If no ID, ensure it gets one and add it
+            alert = ensure_alert_has_id(alert)
+            if alert["id"] not in seen:
+                seen.add(alert["id"])
+                unique_alerts.append(alert)
+    return unique_alerts
+
+def find_alert_by_id_or_base(alerts: list, alert_id: str) -> tuple:
+    """
+    Find an alert by exact ID or by base ID (before deduplication suffix).
+    
+    Returns: (alert_dict, index) or (None, -1) if not found
+    
+    Example: If looking for "id-1", will find original "id" in alerts
+    """
+    # Try exact match first
+    for idx, alert in enumerate(alerts):
+        if alert.get("id") == alert_id:
+            return alert, idx
+    
+    # Try matching base ID (remove -1, -2, etc. suffixes added by frontend deduplication)
+    import re
+    # Check if alert_id ends with -number
+    match = re.match(r'^(.+)-(\d+)$', alert_id)
+    if match:
+        base_id = match.group(1)
+        for idx, alert in enumerate(alerts):
+            if alert.get("id") == base_id:
+                return alert, idx
+    
+    return None, -1
 
 def approvals_get(image_key: str):
     return _APPROVALS.get(image_key)
@@ -100,7 +159,7 @@ def retrieve_all_risks(cid, metadata, image, action):
         risks.append({
             "rule": "Runs as root",
             "severity": "medium",
-            "description": "No non-root user configured in contaciner."
+            "description": "No non-root user configured in container."
         })
 
     if secopt and any("seccomp=unconfined" in str(s) for s in secopt):

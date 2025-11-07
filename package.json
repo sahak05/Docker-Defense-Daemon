@@ -9,5 +9,8 @@
     "dev:ui": "yarn workspace ui dev",
     "build:ui": "yarn workspace ui build",
     "start:ui": "yarn workspace ui preview"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.16"
   }
 }

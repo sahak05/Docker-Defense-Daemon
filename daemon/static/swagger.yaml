@@ -39,6 +39,7 @@ paths:
 
   /api/alerts:
     get:
+      operationId: app.list_alerts
       summary: List recent alerts
       description: Returns persisted alerts.
       parameters:
