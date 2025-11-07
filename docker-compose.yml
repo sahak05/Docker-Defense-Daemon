@@ -6,7 +6,7 @@ services:
       - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./config.yml:/app/config/config.yml
+      - ./config.yml:/app/config.yml
       - ./alerts:/app/alerts
     environment:
       - ALERTS_FILE=/app/alerts/alerts.jsonl
@@ -38,7 +38,7 @@ services:
       -o stdout_output.enabled=true
       -o http_output.enabled=true
       -o http_output.url=http://daemon-defense:8080/api/falco-alert
-      -o ebpf.drop_failed_programs=true
+      -o http_output.insecure=true
     depends_on:
       daemon-defense:
         condition: service_healthy
