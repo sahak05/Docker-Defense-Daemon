@@ -265,6 +265,12 @@ def process_falco_alert(payload):
             "raw": payload,
         }
 
+        
+
+        # Persist alert to disk
+        persist_alert_line(alert_record, ALERTS_FILE)
+        logging.info(f"[Falco] Persisted async alert for {container_id or 'unknown'}")
+
         # Auto-stop logic based on Falco rules in config
         cfg = load_config()
         auto_rules = (cfg.get("falco", {}) or {}).get("auto_stop_on_rules", []) or []
@@ -279,10 +285,6 @@ def process_falco_alert(payload):
                     alert_record["action_taken"] = "would-auto-stop (DRY_RUN)"
             except Exception as e:
                 alert_record["action_taken_error"] = str(e)
-
-        # Persist alert to disk
-        persist_alert_line(alert_record, ALERTS_FILE)
-        logging.info(f"[Falco] Persisted async alert for {container_id or 'unknown'}")
 
     except Exception as e:
         logging.exception(f"[Falco] Async processing failed: {e}")
