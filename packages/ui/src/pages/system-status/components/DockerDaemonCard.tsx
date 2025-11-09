@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Server } from "lucide-react";
 import {
   Card,
@@ -6,16 +6,13 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../components/uiLibraries/card";
+import { getDockerDaemonInfo } from "../../../utils/dashboard";
 
-interface DockerDaemonCardProps {
-  data?: {
-    images: number;
-    imagesSize: string;
-    volumes: number;
-    volumesSize: string;
-    networks: number;
-    networkDetails: string;
-  };
+interface DockerDaemonData {
+  images: { total: number; sizeGb: number };
+  volumes: { total: number };
+  networks: { total: number; bridge: number; custom: number };
+  timestamp: string;
 }
 
 const subClass = "text-muted-foreground";
@@ -33,16 +30,67 @@ const StatItem: React.FC<{
   </div>
 );
 
-export const DockerDaemonCard: React.FC<DockerDaemonCardProps> = ({
-  data = {
-    images: 24,
-    imagesSize: "3.2 GB",
-    volumes: 18,
-    volumesSize: "12.5 GB",
-    networks: 5,
-    networkDetails: "3 bridge, 2 custom",
-  },
-}) => {
+export const DockerDaemonCard: React.FC = () => {
+  const [data, setData] = useState<DockerDaemonData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const dockerInfo = await getDockerDaemonInfo();
+        setData(dockerInfo);
+        setError(null);
+      } catch (err) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Failed to fetch Docker daemon info";
+        setError(message);
+        console.error("Error fetching Docker daemon info:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Server className="h-5 w-5" />
+            Docker Daemon
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground">Loading Docker daemon info...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Server className="h-5 w-5" />
+            Docker Daemon
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-red-500">
+            {error || "Failed to load Docker daemon info"}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -55,18 +103,18 @@ export const DockerDaemonCard: React.FC<DockerDaemonCardProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <StatItem
             label="Images"
-            value={`${data.images} total`}
-            detail={data.imagesSize}
+            value={`${data.images.total} total`}
+            detail={`${data.images.sizeGb} GB`}
           />
           <StatItem
             label="Volumes"
-            value={`${data.volumes} total`}
-            detail={data.volumesSize}
+            value={`${data.volumes.total} total`}
+            detail="Volume storage"
           />
           <StatItem
             label="Networks"
-            value={`${data.networks} total`}
-            detail={data.networkDetails}
+            value={`${data.networks.total} total`}
+            detail={`${data.networks.bridge} bridge, ${data.networks.custom} custom`}
           />
         </div>
       </CardContent>
