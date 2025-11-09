@@ -11,7 +11,7 @@ import { Button } from "../../components/uiLibraries/button";
 import { Badge } from "../../components/uiLibraries/badge";
 import { useTheme } from "../../hooks/useTheme";
 import {
-  getImageApprovalStatus,
+  getContainerImages,
   approveImage,
   denyImage,
 } from "../../utils/dashboard";
@@ -27,66 +27,39 @@ interface ImageApprovalItem {
 
 export const ImageApprovals: React.FC = () => {
   const { isDarkMode } = useTheme();
-  const [images, setImages] = useState<ImageApprovalItem[]>([
-    // Mock data - in production, this would come from backend
-    {
-      imageKey: "alpine:3.18",
-      imageName: "Alpine Linux 3.18",
-      status: "pending",
-    },
-    {
-      imageKey: "nginx:latest",
-      imageName: "NGINX Latest",
-      status: "approved",
-      lastUpdated: new Date(Date.now() - 86400000).toLocaleString(),
-    },
-    {
-      imageKey: "postgres:15",
-      imageName: "PostgreSQL 15",
-      status: "pending",
-    },
-    {
-      imageKey: "redis:7",
-      imageName: "Redis 7",
-      status: "denied",
-      lastUpdated: new Date(Date.now() - 172800000).toLocaleString(),
-    },
-  ]);
+  const [images, setImages] = useState<ImageApprovalItem[]>([]);
   const [loadingImages, setLoadingImages] = useState<Set<string>>(new Set());
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Fetch approval status on mount
+  // Fetch container images on mount
   useEffect(() => {
-    const fetchStatuses = async () => {
+    const fetchImages = async () => {
       try {
-        for (const image of images) {
-          try {
-            const status = await getImageApprovalStatus(image.imageKey);
-            setImages((prev) =>
-              prev.map((img) =>
-                img.imageKey === image.imageKey
-                  ? {
-                      ...img,
-                      status: status.approved ? "approved" : "denied",
-                      lastUpdated: new Date().toLocaleString(),
-                    }
-                  : img
-              )
-            );
-          } catch (error) {
-            console.error(
-              `Failed to fetch status for ${image.imageKey}:`,
-              error
-            );
-          }
-        }
-      } catch (error) {
-        console.error("Failed to fetch image statuses:", error);
+        setIsLoading(true);
+        setError(null);
+        const containerImages = await getContainerImages();
+        const transformedImages: ImageApprovalItem[] = containerImages.map(
+          (img) => ({
+            imageKey: img.imageKey,
+            imageName: img.imageName,
+            status: img.approved ? "approved" : "denied",
+            lastUpdated: img.lastUpdated
+              ? new Date(img.lastUpdated).toLocaleString()
+              : undefined,
+          })
+        );
+        setImages(transformedImages);
+      } catch (err) {
+        console.error("Failed to fetch container images:", err);
+        setError(err instanceof Error ? err.message : "Failed to load images");
+        toast.error("Failed to load container images");
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    if (images.length > 0) {
-      fetchStatuses();
-    }
+    fetchImages();
   }, []);
 
   const handleApprove = async (imageKey: string, imageName: string) => {
@@ -181,12 +154,36 @@ export const ImageApprovals: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-foreground mb-1">Image Approvals</h1>
-        <p className="text-muted-foreground">
-          Manage image approval status for container security
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-foreground mb-1">Image Approvals</h1>
+          <p className="text-muted-foreground">
+            Manage image approval status for container security
+          </p>
+        </div>
+        {isLoading && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader className="h-4 w-4 animate-spin" />
+            Loading...
+          </div>
+        )}
       </div>
+
+      {error && (
+        <Card className="border-red-500">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-text-error shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-text-error">
+                  Error loading images
+                </p>
+                <p className="text-sm text-text-error">{error}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -241,7 +238,7 @@ export const ImageApprovals: React.FC = () => {
               </div>
             ) : (
               images.map((image) => {
-                const isLoading = loadingImages.has(image.imageKey);
+                const isImageLoading = loadingImages.has(image.imageKey);
                 const statusColor = getStatusColor(image.status);
 
                 return (
@@ -316,9 +313,9 @@ export const ImageApprovals: React.FC = () => {
                         onClick={() =>
                           handleApprove(image.imageKey, image.imageName)
                         }
-                        disabled={isLoading}
+                        disabled={isImageLoading}
                       >
-                        {isLoading ? (
+                        {isImageLoading ? (
                           <Loader className="h-4 w-4 animate-spin" />
                         ) : (
                           <Check className="h-4 w-4" />
@@ -334,9 +331,9 @@ export const ImageApprovals: React.FC = () => {
                         onClick={() =>
                           handleDeny(image.imageKey, image.imageName)
                         }
-                        disabled={isLoading}
+                        disabled={isImageLoading}
                       >
-                        {isLoading ? (
+                        {isImageLoading ? (
                           <Loader className="h-4 w-4 animate-spin" />
                         ) : (
                           <X className="h-4 w-4" />

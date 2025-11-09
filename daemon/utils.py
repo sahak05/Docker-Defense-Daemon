@@ -7,10 +7,16 @@ from datetime import datetime
 import yaml
 from datetime import datetime, timedelta
 import uuid
+import alerts_store
+import threading
 
 _CONFIG = None
 _APPROVALS = {}    
-_TRIVY_CACHE = {}   
+_TRIVY_CACHE = {}
+_APPROVALS_LOCK = threading.Lock()
+
+APPROVALS_FILE = os.environ.get("APPROVALS_FILE", "/app/alerts/approvals.jsonl")
+os.makedirs(os.path.dirname(APPROVALS_FILE), exist_ok=True)   
 
 def load_config(path="/app/config.yml"):
     global _CONFIG
@@ -81,11 +87,60 @@ def find_alert_by_id_or_base(alerts: list, alert_id: str) -> tuple:
     
     return None, -1
 
+
+def _load_approvals_from_file():
+    """Load approvals from the approvals.jsonl file into memory."""
+    global _APPROVALS
+    _APPROVALS = {}
+    
+    if not os.path.exists(APPROVALS_FILE):
+        return
+    
+    try:
+        with open(APPROVALS_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    entry = json.loads(line)
+                    if "image_key" in entry and "approved" in entry:
+                        _APPROVALS[entry["image_key"]] = {
+                            "approved": entry["approved"],
+                            "ts": entry.get("ts", datetime.utcnow().isoformat() + "Z")
+                        }
+                except Exception:
+                    continue
+    except Exception as e:
+        logging.warning(f"Failed to load approvals from file: {e}")
+
+
+def _save_approvals_to_file():
+    """Save current approvals to the approvals.jsonl file."""
+    try:
+        with open(APPROVALS_FILE, "w", encoding="utf-8") as f:
+            for image_key, approval_data in _APPROVALS.items():
+                entry = {
+                    "image_key": image_key,
+                    "approved": approval_data.get("approved", False),
+                    "ts": approval_data.get("ts", datetime.utcnow().isoformat() + "Z")
+                }
+                f.write(json.dumps(entry) + "\n")
+    except Exception as e:
+        logging.error(f"Failed to save approvals to file: {e}")
+
+
 def approvals_get(image_key: str):
-    return _APPROVALS.get(image_key)
+    """Get approval status for an image. Returns None if not found."""
+    with _APPROVALS_LOCK:
+        return _APPROVALS.get(image_key)
+
 
 def approvals_set(image_key: str, approved: bool):
-    _APPROVALS[image_key] = {"approved": approved, "ts": datetime.utcnow().isoformat()+"Z"}
+    """Set approval status for an image and persist to file."""
+    with _APPROVALS_LOCK:
+        _APPROVALS[image_key] = {
+            "approved": approved,
+            "ts": datetime.utcnow().isoformat() + "Z"
+        }
+        _save_approvals_to_file()
 
 def policy_should_block(trivy_summary: dict, cfg: dict):
     if not trivy_summary:
@@ -193,11 +248,16 @@ def retrieve_all_risks(cid, metadata, image, action):
 
 def persist_alert(alert_json, file_path=ALERTS_FILE):
     try:
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(alert_json) + "\n")
+        # Use alerts_store append functionality and then compact the file to remove duplicates.
+        alerts_store.append_alert(alert_json, file_path)
         cid = alert_json.get("id") or alert_json.get("container", {}).get("id") or alert_json.get("metadata", {}).get("id")
         log.info("Persisted alert%s to %s", f" for container {cid}" if cid else "", file_path)
+        # Compact the alerts file to ensure duplicate IDs are removed and only the newest kept.
+        try:
+            alerts_store.compact_alerts_file(file_path)
+        except Exception:
+            # Don't fail the whole persist if compaction has an issue. Log and continue.
+            log.exception("Failed to compact alerts file after append")
     except Exception as e:
         log.exception("Failed to persist alert: %s", e)
 
