@@ -11,6 +11,10 @@ gate:
 
 falco:
   auto_stop_on_rules:
-    - "Interactive shell in container"
+    - "Write below etc"
     - "Read sensitive file"
+    - "Outbound connection from container"
+    - "Package manager activity in container"
+    - "Ptrace syscall used"
+    - "Root running unknown binary"
   stop_grace_seconds: 5

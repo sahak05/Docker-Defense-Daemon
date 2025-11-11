@@ -23,6 +23,11 @@ from utils import (
     deduplicate_alerts,
     find_alert_by_id_or_base,
 )
+RED = "\033[91m"
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+BLUE = "\033[94m"
+RESET = "\033[0m"
 
 # --- Logging setup ---
 os.environ["PYTHONUNBUFFERED"] = "1"
@@ -208,8 +213,10 @@ def resolve_alert(alert_id):
 
 def process_falco_alert(payload):
     """
-    Falco alert processing executed in a background thread.
-    Runs enrichment, Trivy scanning, and persistence.
+    Falco alert processing logic:
+    - Logs alerts from Falco
+    - If rule matches one in config.yml -> kills shell (sh/bash/zsh) inside the same container
+    - Does NOT kill container itself
     """
     try:
         rule = payload.get("rule")
@@ -227,6 +234,7 @@ def process_falco_alert(payload):
         proc_name = fields.get("proc.name")
         user_name = fields.get("user.name")
 
+        # Log Falco alert summary
         logging.info(json.dumps({
             "source": "falco",
             "rule": rule,
@@ -236,6 +244,7 @@ def process_falco_alert(payload):
             "user": user_name
         }))
 
+        # Enrich metadata and perform Trivy scan
         enrichment = enrich_with_inspect(container_id or "")
         image_ref = enrichment.get("image")
         image_id = enrichment.get("image_id")
@@ -244,6 +253,7 @@ def process_falco_alert(payload):
         if image_ref:
             trivy_summary = trivy_scan_image(image_ref, image_id=image_id)
 
+        # Build structured alert record
         alert_record = {
             "source": "falco",
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -266,26 +276,65 @@ def process_falco_alert(payload):
             "raw": payload,
         }
 
-        
-
-        # Persist alert to disk
+        # Persist alert
         persist_alert_line(alert_record, ALERTS_FILE)
         logging.info(f"[Falco] Persisted async alert for {container_id or 'unknown'}")
 
-        # Auto-stop logic based on Falco rules in config
+        # === Auto-stop or shell-kill logic ===
         cfg = load_config()
         auto_rules = (cfg.get("falco", {}) or {}).get("auto_stop_on_rules", []) or []
+        stop_grace = int((cfg.get("falco") or {}).get("stop_grace_seconds", 5))
+        dry = os.environ.get("DRY_RUN", "false").lower() in ("1", "true", "yes")
+
         if rule in auto_rules and container_id:
             try:
-                dry = os.environ.get("DRY_RUN", "false").lower() in ("1", "true", "yes")
-                if not dry:
-                    c = client.containers.get(container_id)
-                    c.stop(timeout=int((cfg.get("falco") or {}).get("stop_grace_seconds", 5)))
-                    alert_record["action_taken"] = "auto-stopped"
+                client = docker.from_env()
+                c = client.containers.get(container_id)
+
+                proc_name = payload.get("output_fields", {}).get("proc.name", "")
+                shell_procs = ["sh", "bash", "zsh"]
+
+                # Kill only shell process (if rule matched & inside shell)
+                if proc_name in shell_procs:
+                    if not dry:
+                        pid_out = c.exec_run("ps -eo pid,comm")
+                        pid_lines = pid_out.output.decode().splitlines()
+
+                        shell_killed = False
+                        for line in pid_lines:
+                            parts = line.strip().split(None, 1)
+                            if len(parts) == 2:
+                                pid, cmd = parts
+                                if cmd.strip() == proc_name:
+                                    if pid == "1":
+                                        c.exec_run("kill -9 1")
+                                        shell_killed = True
+                                        alert_record["action_taken"] = f"shell '{proc_name}' was PID 1 — killed"
+                                        break
+                                    else:
+                                        c.exec_run(f"kill -9 {pid}")
+                                        shell_killed = True
+                                        alert_record["action_taken"] = f"shell '{proc_name}' (PID {pid}) killed"
+                                        break
+
+                        if not shell_killed:
+                            alert_record["action_taken"] = f"shell '{proc_name}' not found in ps list"
+                    else:
+                        alert_record["action_taken"] = f"would-kill shell '{proc_name}' (DRY_RUN)"
                 else:
-                    alert_record["action_taken"] = "would-auto-stop (DRY_RUN)"
+                    # Fallback: if not shell, just stop the container gracefully
+                    if not dry:
+                        c.stop(timeout=stop_grace)
+                        alert_record["action_taken"] = "auto-stopped container"
+                    else:
+                        alert_record["action_taken"] = "would-auto-stop container (DRY_RUN)"
+
             except Exception as e:
                 alert_record["action_taken_error"] = str(e)
+                logging.error(f"[Falco] Action failed for {container_id}: {e}")
+
+        else:
+            logging.info(f"[Falco] Rule '{rule}' not in auto-stop list — no shell action taken")
 
     except Exception as e:
         logging.exception(f"[Falco] Async processing failed: {e}")
