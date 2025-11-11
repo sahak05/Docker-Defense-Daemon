@@ -327,14 +327,14 @@ def process_falco_alert(payload):
                         c.stop(timeout=stop_grace)
                         alert_record["action_taken"] = "auto-stopped container"
                     else:
-                        alert_record["action_taken"] = "would-auto-stop container (DRY_RUN)"
+                        alert_record["action_taken"] = "would-auto-stop container"
 
             except Exception as e:
                 alert_record["action_taken_error"] = str(e)
                 logging.error(f"[Falco] Action failed for {container_id}: {e}")
 
         else:
-            logging.info(f"[Falco] Rule '{rule}' not in auto-stop list — no shell action taken")
+            logging.info(f"[Falco] Rule '{rule}' not in auto-stop list: No shell action taken")
 
     except Exception as e:
         logging.exception(f"[Falco] Async processing failed: {e}")
