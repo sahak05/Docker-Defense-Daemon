@@ -15,24 +15,33 @@ This security daemon provides:
 ## 🏗️ Architecture
 
 ```
-┌─────────────────┐
-│   React UI      │ (Port 3000 in dev, served by Flask in prod)
-│   (Vite/React)  │
-└────────┬────────┘
-         │ HTTP/REST
-┌────────▼────────┐
-│  Defense Daemon │ (Flask Backend)
-│  - Event Loop   │
-│  - Risk Engine  │
-│  - Trivy Scan   │
-└────────┬────────┘
-         │
-    ┌────┴─────┬─────────────────┐
-    │          │                 │
-┌───▼────┐ ┌──▼─────┐   ┌──────▼─────┐
-│ Docker │ │ Falco  │   │  /alerts/  │
-│ Events │ │ Runtime│   │ (Storage)  │
-└────────┘ └────────┘   └────────────┘
+┌─────────────────────────────────────┐
+│   Multi-Stage Docker Build          │
+│                                     │
+│  Stage 1: Node.js (UI Builder)     │
+│  - yarn install                     │
+│  - yarn build (Vite)                │
+│  - Output: /build/packages/ui/build │
+│                                     │
+│  Stage 2: Python (Backend)          │
+│  - Copy built UI → ./static         │
+│  - Flask serves UI + API            │
+└─────────────────┬───────────────────┘
+                  │ Port 8080
+         ┌────────▼────────┐
+         │  Defense Daemon │ (Flask Backend + React UI)
+         │  - Static Files │ (React SPA)
+         │  - Event Loop   │
+         │  - Risk Engine  │
+         │  - Trivy Scan   │
+         └────────┬────────┘
+                  │
+    ┌─────────────┼─────────────────┐
+    │             │                 │
+┌───▼────┐ ┌─────▼────┐   ┌────────▼─────┐
+│ Docker │ │  Falco   │   │  /alerts/    │
+│ Events │ │ Runtime  │   │ (Storage)    │
+└────────┘ └──────────┘   └──────────────┘
 ```
 
 ## 📋 Prerequisites
@@ -50,11 +59,13 @@ This security daemon provides:
 
 ## 🚀 Quick Start
 
-### 1. Start the Security Stack
+### Production Mode (Recommended)
+
+The application uses a **multi-stage Docker build** that automatically builds the React UI and serves it via Flask:
 
 ```bash
-# Start all services (daemon + Falco)
-docker compose up -d
+# Build and start all services (includes UI build)
+docker compose up -d --build
 
 # View logs in real-time
 docker compose logs -f
@@ -63,27 +74,31 @@ docker compose logs -f
 docker compose down
 ```
 
-### 2. Run the React UI (Development)
+**Access the application at:** `http://localhost:8080`
+
+✨ **No separate UI build needed!** The Docker build process:
+
+1. Builds the React UI using Node.js and Yarn
+2. Copies the built assets to the Flask backend
+3. Serves everything from a single container on port 8080
+
+### Development Mode (UI Hot Reload)
+
+For UI development with instant hot reload:
 
 ```bash
-# Install dependencies (first time only)
-yarn install
+# Terminal 1: Start backend services
+docker compose up -d
 
-# Start the development server
-yarn dev:ui
+# Terminal 2: Start UI dev server
+cd packages/ui
+yarn install  # First time only
+yarn dev
 ```
 
-The UI will be available at `http://localhost:3000`
+The dev UI will be available at `http://localhost:5173` with hot reload enabled.
 
-### 3. Build UI for Production
-
-```bash
-# Build optimized React bundle
-yarn build:ui
-
-# Preview production build
-yarn start:ui
-```
+**Note:** In dev mode, the UI dev server proxies API calls to the Flask backend at `http://localhost:8080`
 
 ## 🧪 Testing the System
 
@@ -150,46 +165,85 @@ docker rm -f test_all_risks
 ```
 docker-defense-daemon/
 ├── daemon/              # Flask backend + Docker SDK
-│   ├── app.py          # Main daemon logic
-│   ├── Dockerfile      # Daemon container image
-│   └── requirements.txt
+│   ├── app.py          # Main daemon logic (serves UI + API)
+│   ├── Dockerfile      # Multi-stage build (Node + Python)
+│   ├── requirements.txt
+│   ├── routes/         # API blueprints
+│   └── static/         # Built UI assets (created during Docker build)
 ├── packages/ui/         # React frontend (Yarn workspace)
-│   ├── src/
+│   ├── src/            # React components, pages, hooks
 │   ├── package.json
-│   └── vite.config.ts
-├── falco/              # Falco configuration
-│   └── falco_rules.yaml
-├── alerts/             # Persistent alert storage
+│   ├── vite.config.ts
+│   └── build/          # Build output (not in repo)
+├── falco_rules/        # Falco custom rules
+│   └── custom.rules
+├── alerts/             # Persistent alert storage (JSONL)
+│   ├── alerts.jsonl
+│   └── approvals.jsonl
 ├── docker-compose.yml  # Multi-container orchestration
-└── README.md
+├── yarn.lock           # Yarn lockfile (used in Docker build)
+├── postcss.config.js   # PostCSS config (used in Docker build)
+└── documentations/     # Project documentation
 ```
 
 ## 🔧 Development Workflow
 
-### Backend (Daemon)
+### Full Stack Rebuild (Production Mode)
 
 ```bash
-# View daemon logs
+# Rebuild everything (backend + UI)
+docker compose up -d --build
+
+# View all logs
+docker compose logs -f
+
+# View specific service logs
 docker compose logs -f daemon-defense
-
-# Restart daemon after code changes
-docker compose restart daemon-defense
-
-# Rebuild daemon image
-docker compose up -d --build daemon-defense
+docker compose logs -f falco
 ```
 
-### Frontend (React UI)
+### Backend Development
 
 ```bash
-# Hot reload development
-yarn dev:ui
+# Restart daemon after Python code changes
+docker compose restart daemon-defense
 
-# Lint code
-yarn workspace ui lint
+# Rebuild only daemon (if Dockerfile changed)
+docker compose up -d --build daemon-defense
 
-# Build production bundle
-yarn build:ui
+# View daemon logs
+docker compose logs -f daemon-defense
+```
+
+### Frontend Development (Hot Reload)
+
+For rapid UI development without rebuilding Docker:
+
+```bash
+# Start backend in Docker
+docker compose up -d
+
+# Start UI dev server (from project root)
+cd packages/ui
+yarn install  # First time only
+yarn dev      # Runs on http://localhost:5173
+```
+
+**Dev server features:**
+
+- ⚡ Instant hot module replacement (HMR)
+- 🔄 API proxy to `http://localhost:8080`
+- 🐛 Better error messages and stack traces
+
+### UI Production Build (Standalone)
+
+```bash
+# Build UI locally (optional, Docker does this automatically)
+cd packages/ui
+yarn build
+
+# Preview production build
+yarn preview
 ```
 
 ### Viewing Logs
@@ -225,12 +279,51 @@ Custom rules are defined in `falco/falco_rules.yaml`. Refer to [Falco documentat
 
 ## 🛠️ API Endpoints
 
-| Endpoint           | Method | Description               |
-| ------------------ | ------ | ------------------------- |
-| `/api/alerts`      | GET    | Fetch all security alerts |
-| `/api/falco-alert` | POST   | Receive alerts from Falco |
-| `/api/containers`  | GET    | List monitored containers |
-| `/api/stop/<id>`   | POST   | Stop a risky container    |
+### Alert Management
+
+| Endpoint                   | Method | Description               |
+| -------------------------- | ------ | ------------------------- |
+| `/api/alerts`              | GET    | Fetch all security alerts |
+| `/api/alerts/<id>/ack`     | POST   | Acknowledge an alert      |
+| `/api/alerts/<id>/resolve` | POST   | Resolve an alert          |
+| `/api/falco-alert`         | POST   | Receive alerts from Falco |
+
+### Container Management
+
+| Endpoint                       | Method | Description                      |
+| ------------------------------ | ------ | -------------------------------- |
+| `/api/containers`              | GET    | List all monitored containers    |
+| `/api/containers/images/list`  | GET    | List container images            |
+| `/api/containers/<id>/stop`    | POST   | Stop a container                 |
+| `/api/containers/<id>/inspect` | GET    | Get container inspection details |
+
+### Image Approvals
+
+| Endpoint                         | Method | Description               |
+| -------------------------------- | ------ | ------------------------- |
+| `/api/alerts/approve/<imageKey>` | POST   | Approve a container image |
+| `/api/alerts/deny/<imageKey>`    | POST   | Deny a container image    |
+
+### System Status
+
+| Endpoint              | Method | Description                   |
+| --------------------- | ------ | ----------------------------- |
+| `/api/system/status`  | GET    | Get system health and metrics |
+| `/api/daemon/restart` | POST   | Restart the daemon            |
+| `/api/daemon/stop`    | POST   | Stop the daemon               |
+
+### Events
+
+| Endpoint      | Method | Description     |
+| ------------- | ------ | --------------- |
+| `/api/events` | GET    | Fetch event log |
+
+### Static UI (Production)
+
+| Endpoint  | Method | Description                     |
+| --------- | ------ | ------------------------------- |
+| `/`       | GET    | Serve React app (index.html)    |
+| `/<path>` | GET    | Serve static assets or fallback |
 
 ## 📚 Resources
 
@@ -276,10 +369,53 @@ docker compose logs falco
 # Falco requires kernel headers on the host
 ```
 
-### UI can't reach backend
+### UI not loading (404 errors)
 
-- Ensure CORS is configured in Flask
-- Check that backend is running on expected port
-- Verify proxy settings in `vite.config.ts`
+```bash
+# Rebuild with UI build included
+docker compose down
+docker compose up -d --build
+
+# Check if static folder exists in container
+docker exec docker-defense-daemon-daemon-defense-1 ls -la /app/static
+```
+
+### UI build fails during Docker build
+
+**Common issues:**
+
+- **TypeScript errors:** Check `docker compose logs` for TS compilation errors
+- **Missing dependencies:** Ensure `yarn.lock` is up to date
+- **Out of memory:** Increase Docker memory allocation in Docker Desktop settings
+
+```bash
+# See full build output
+docker compose up --build
+
+# Check build logs
+docker compose logs daemon-defense
+```
+
+### UI can't reach backend API
+
+**In production mode (port 8080):**
+
+- UI and API are on the same origin, no CORS issues
+- Check that daemon container is healthy: `docker compose ps`
+
+**In development mode (UI on 5173, backend on 8080):**
+
+- Ensure CORS is configured in Flask (`flask_cors` installed)
+- Verify proxy settings in `packages/ui/vite.config.ts`
+- Check backend is accessible: `curl http://localhost:8080/api/alerts`
+
+### Changes not reflecting after rebuild
+
+```bash
+# Clear Docker cache and rebuild from scratch
+docker compose down
+docker system prune -f
+docker compose up -d --build
+```
 
 ## 📝 License

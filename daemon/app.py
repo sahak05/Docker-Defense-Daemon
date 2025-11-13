@@ -4,7 +4,7 @@ import time
 import logging
 from datetime import datetime, timezone
 import docker
-from flask import Flask
+from flask import Flask, send_from_directory, send_file
 from flask_cors import CORS
 
 # Initialize logging early
@@ -19,8 +19,10 @@ from events import docker_thread
 
 
 def create_app() -> Flask:
-    app = Flask(__name__)
-    CORS(app, resources={r"/api/": {"origins": ""}})
+    # Set static folder for built UI
+    static_folder = os.path.join(os.path.dirname(__file__), 'static')
+    app = Flask(__name__, static_folder=static_folder, static_url_path='')
+    CORS(app, resources={r"/api/*": {"origins": "*"}})
 
     # Shared state / config
     start_time = time.time()
@@ -53,6 +55,29 @@ def create_app() -> Flask:
     app.register_blueprint(alerts_bp)
     app.register_blueprint(containers_bp)
     app.register_blueprint(system_bp)
+
+    # Serve UI static files
+    @app.route('/')
+    def serve_index():
+        """Serve the React app's index.html"""
+        static_dir = app.static_folder
+        if static_dir and os.path.exists(os.path.join(static_dir, 'index.html')):
+            return send_from_directory(static_dir, 'index.html')
+        return "UI not built. Run 'npm run build' in packages/ui", 404
+
+    @app.route('/<path:path>')
+    def serve_static(path):
+        """Serve static assets or fallback to index.html for React Router"""
+        static_dir = app.static_folder
+        if static_dir:
+            # Check if the file exists in static folder
+            file_path = os.path.join(static_dir, path)
+            if os.path.exists(file_path) and os.path.isfile(file_path):
+                return send_from_directory(static_dir, path)
+            # Fallback to index.html for React Router routes
+            if os.path.exists(os.path.join(static_dir, 'index.html')):
+                return send_from_directory(static_dir, 'index.html')
+        return "UI not built", 404
 
     return app
 

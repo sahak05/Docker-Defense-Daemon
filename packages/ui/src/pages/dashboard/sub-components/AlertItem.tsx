@@ -1,5 +1,4 @@
 import React, { useMemo } from "react";
-import { useDashboardContext } from "../../../context/DashboardContext";
 import { formatTimestamp } from "../../../utils/formatters";
 import { getSeverityColor } from "../../../assets/styles/color";
 import { getSeverityScore } from "../../../utils/iconHelpers";
@@ -22,8 +21,6 @@ interface AlertItemProps {
  */
 
 export const AlertItem = React.memo<AlertItemProps>(({ alert, onClick }) => {
-  const { isDarkMode } = useDashboardContext();
-
   // Compute highest severity risk (memoized to prevent recalc)
   const highestSeverityRisk = useMemo(() => {
     if (!alert?.risks || alert.risks.length === 0) {

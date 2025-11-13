@@ -12,7 +12,6 @@ import type { SystemStatus } from "../../../types/dashboard";
 
 interface SystemResourcesCardProps {
   systemData: SystemStatus | null;
-  isLoading: boolean;
 }
 
 const subClass = "text-muted-foreground";
@@ -46,7 +45,6 @@ const ResourceItem: React.FC<{
 
 export const SystemResourcesCard: React.FC<SystemResourcesCardProps> = ({
   systemData,
-  isLoading,
 }) => {
   const getCpuPercentageValue = (): number | string => {
     const val = systemData?.systemResources.cpu.usagePercent;
