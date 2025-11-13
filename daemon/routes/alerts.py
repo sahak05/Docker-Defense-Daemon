@@ -33,7 +33,7 @@ def health():
 def list_alerts():
     ALERTS_FILE = current_app.config.get("ALERTS_FILE")
     limit = max(1, min(1000, int(request.args.get("limit", "100"))))
-    if not os.path.exists(ALERTS_FILE):
+    if not ALERTS_FILE or not os.path.exists(ALERTS_FILE):
         return jsonify([]), 200
     try:
         rows = []
@@ -47,13 +47,13 @@ def list_alerts():
         rows = deduplicate_alerts(rows)[:limit]
         return jsonify(rows), 200
     except Exception as e:
-        logging.exception("reading alerts failed")
+        log.exception("reading alerts failed")
         return jsonify({"error": str(e)}), 500
 
 
 def _read_alerts_file(alerts_file):
     alerts = []
-    if not os.path.exists(alerts_file):
+    if not alerts_file or not os.path.exists(alerts_file):
         return alerts
     with open(alerts_file, "r", encoding="utf-8") as f:
         for line in f:
@@ -68,8 +68,11 @@ def _read_alerts_file(alerts_file):
 def acknowledge_alert(alert_id):
     if request.method == "OPTIONS":
         return "", 204
-    
+
     ALERTS_FILE = current_app.config.get("ALERTS_FILE")
+    if not ALERTS_FILE:
+        return jsonify({"error": "alerts file not configured"}), 500
+
     try:
         if not os.path.exists(ALERTS_FILE):
             return jsonify({"error": "Alerts file not found"}), 404
@@ -77,16 +80,18 @@ def acknowledge_alert(alert_id):
         alerts = _read_alerts_file(ALERTS_FILE)
         alert, alert_index = find_alert_by_id_or_base(alerts, alert_id)
         if alert is None:
-            logging.warning(f"Alert {alert_id} not found in alerts.jsonl")
+            log.warning("Alert %s not found in alerts.jsonl", alert_id)
             return jsonify({"error": f"Alert {alert_id} not found"}), 404
 
         alert["status"] = "acknowledged"
         alerts[alert_index] = alert
 
+        # Write back updated alerts
         with open(ALERTS_FILE, "w", encoding="utf-8") as f:
             for a in alerts:
                 f.write(json.dumps(a) + "\n")
 
+        # Append audit line
         audit_entry = {
             "alert_id": alert_id,
             "original_id": alert.get("id"),
@@ -97,10 +102,10 @@ def acknowledge_alert(alert_id):
         with open(ALERTS_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(audit_entry) + "\n")
 
-        logging.info(f"Alert {alert_id} acknowledged (original_id: {alert.get('id')})")
+        log.info("Alert %s acknowledged (original_id: %s)", alert_id, alert.get("id"))
         return jsonify({"status": "acknowledged", "alert_id": alert_id}), 200
     except Exception as e:
-        logging.exception(f"Failed to acknowledge alert {alert_id}")
+        log.exception("Failed to acknowledge alert %s", alert_id)
         return jsonify({"error": str(e)}), 500
 
 
@@ -108,8 +113,11 @@ def acknowledge_alert(alert_id):
 def resolve_alert(alert_id):
     if request.method == "OPTIONS":
         return "", 204
-    
+
     ALERTS_FILE = current_app.config.get("ALERTS_FILE")
+    if not ALERTS_FILE:
+        return jsonify({"error": "alerts file not configured"}), 500
+
     try:
         if not os.path.exists(ALERTS_FILE):
             return jsonify({"error": "Alerts file not found"}), 404
@@ -117,7 +125,7 @@ def resolve_alert(alert_id):
         alerts = _read_alerts_file(ALERTS_FILE)
         alert, alert_index = find_alert_by_id_or_base(alerts, alert_id)
         if alert is None:
-            logging.warning(f"Alert {alert_id} not found in alerts.jsonl")
+            log.warning("Alert %s not found in alerts.jsonl", alert_id)
             return jsonify({"error": f"Alert {alert_id} not found"}), 404
 
         alert["status"] = "resolved"
@@ -137,28 +145,47 @@ def resolve_alert(alert_id):
         with open(ALERTS_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(audit_entry) + "\n")
 
-        logging.info(f"Alert {alert_id} resolved (original_id: {alert.get('id')})")
+        log.info("Alert %s resolved (original_id: %s)", alert_id, alert.get("id"))
         return jsonify({"status": "resolved", "alert_id": alert_id}), 200
     except Exception as e:
-        logging.exception(f"Failed to resolve alert {alert_id}")
+        log.exception("Failed to resolve alert %s", alert_id)
         return jsonify({"error": str(e)}), 500
 
 
 def _process_falco_alert(payload, alerts_file):
+    """
+    Falco alert processing logic:
+    - Logs alerts from Falco
+    - If rule matches one in config.yml -> kills shell (sh/bash/zsh) inside the same container
+    - Does NOT kill container itself
+    """
     try:
-        rule = payload.get("rule")
-        output = payload.get("output")
-        priority = (payload.get("priority") or "warning").lower()
-        fields = payload.get("output_fields") or {}
+        rule = (payload or {}).get("rule")
+        output = (payload or {}).get("output")
+        priority = ((payload or {}).get("priority") or "warning").lower()
+        fields = (payload or {}).get("output_fields") or {}
 
         container_id = (
             fields.get("container.id")
             or fields.get("containerId")
-            or (payload.get("container") or {}).get("id")
-            or (payload.get("context", {}) or {}).get("container_id")
+            or ((payload or {}).get("container") or {}).get("id")
+            or ((payload or {}).get("context", {}) or {}).get("container_id")
             or ""
         )
+        proc_name = fields.get("proc.name")
+        user_name = fields.get("user.name")
 
+        # Log Falco alert summary
+        log.info(json.dumps({
+            "source": "falco",
+            "rule": rule,
+            "output": output,
+            "container_id": container_id,
+            "proc": proc_name,
+            "user": user_name
+        }))
+
+        # Enrich metadata and perform Trivy scan
         enrichment = enrich_with_inspect(container_id or "")
         image_ref = enrichment.get("image")
         image_id = enrichment.get("image_id")
@@ -167,6 +194,7 @@ def _process_falco_alert(payload, alerts_file):
         if image_ref:
             trivy_summary = trivy_scan_image(image_ref, image_id=image_id)
 
+        # Build structured alert record
         alert_record = {
             "source": "falco",
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -183,33 +211,77 @@ def _process_falco_alert(payload, alerts_file):
                 "mounts": enrichment.get("mounts"),
             },
             "detected_risks": enrichment.get("detected_risks") or [],
-            "process": payload.get("proc.name"),
-            "user": payload.get("user.name"),
+            "process": proc_name,
+            "user": user_name,
             "trivy": trivy_summary,
             "raw": payload,
         }
 
-        # Auto-stop logic
+        # Persist alert (use the alerts_file parameter passed into this function)
+        try:
+            persist_alert_line(alert_record, alerts_file)
+            log.info("[Falco] Persisted async alert for %s", container_id or "unknown")
+        except Exception as e:
+            log.exception("Failed to persist falco alert to %s: %s", alerts_file, e)
+
+        # === Auto-stop or shell-kill logic ===
         cfg = load_config()
         auto_rules = (cfg.get("falco", {}) or {}).get("auto_stop_on_rules", []) or []
+        stop_grace = int((cfg.get("falco") or {}).get("stop_grace_seconds", 5))
+        dry = os.environ.get("DRY_RUN", "false").lower() in ("1", "true", "yes")
+
         if rule in auto_rules and container_id:
             try:
-                dry = os.environ.get("DRY_RUN", "false").lower() in ("1", "true", "yes")
-                if not dry:
-                    client = docker.from_env()
-                    c = client.containers.get(container_id)
-                    c.stop(timeout=int((cfg.get("falco") or {}).get("stop_grace_seconds", 5)))
-                    alert_record["action_taken"] = "auto-stopped"
+                client = docker.from_env()
+                c = client.containers.get(container_id)
+
+                proc_name = (payload or {}).get("output_fields", {}).get("proc.name", "")
+                shell_procs = ["sh", "bash", "zsh"]
+
+                # Kill only shell process (if rule matched & inside shell)
+                if proc_name in shell_procs:
+                    if not dry:
+                        pid_out = c.exec_run("ps -eo pid,comm")
+                        pid_lines = pid_out.output.decode().splitlines()
+
+                        shell_killed = False
+                        for line in pid_lines:
+                            parts = line.strip().split(None, 1)
+                            if len(parts) == 2:
+                                pid, cmd = parts
+                                if cmd.strip() == proc_name:
+                                    if pid == "1":
+                                        c.exec_run("kill -9 1")
+                                        shell_killed = True
+                                        alert_record["action_taken"] = f"shell '{proc_name}' was PID 1 — killed"
+                                        break
+                                    else:
+                                        c.exec_run(f"kill -9 {pid}")
+                                        shell_killed = True
+                                        alert_record["action_taken"] = f"shell '{proc_name}' (PID {pid}) killed"
+                                        break
+
+                        if not shell_killed:
+                            alert_record["action_taken"] = f"shell '{proc_name}' not found in ps list"
+                    else:
+                        alert_record["action_taken"] = f"would-kill shell '{proc_name}' (DRY_RUN)"
                 else:
-                    alert_record["action_taken"] = "would-auto-stop (DRY_RUN)"
+                    # Fallback: if not shell, just stop the container gracefully
+                    if not dry:
+                        c.stop(timeout=stop_grace)
+                        alert_record["action_taken"] = "auto-stopped container"
+                    else:
+                        alert_record["action_taken"] = "would-auto-stop container"
+
             except Exception as e:
                 alert_record["action_taken_error"] = str(e)
+                log.error("[Falco] Action failed for %s: %s", container_id, e)
 
-        persist_alert_line(alert_record, alerts_file)
-        log.info(f"[Falco] Persisted async alert for {container_id or 'unknown'}")
+        else:
+            log.info("[Falco] Rule '%s' not in auto-stop list: No shell action taken", rule)
 
     except Exception as e:
-        log.exception(f"[Falco] Async processing failed: {e}")
+        log.exception("[Falco] Async processing failed: %s", e)
 
 
 @alerts_bp.route("/api/falco-alert", methods=["POST"])
@@ -220,7 +292,16 @@ def falco_alert():
     except Exception as e:
         return jsonify({"error": f"invalid json: {e}"}), 400
 
-    threading.Thread(target=_process_falco_alert, args=(payload, ALERTS_FILE)).start()
+    if not ALERTS_FILE:
+        return jsonify({"error": "alerts file not configured"}), 500
+
+    try:
+        t = threading.Thread(target=_process_falco_alert, args=(payload, ALERTS_FILE), daemon=True)
+        t.start()
+    except Exception as e:
+        log.exception("Failed to start falco alert thread: %s", e)
+        return jsonify({"error": "failed to start background processor"}), 500
+
     return jsonify({"status": "received"}), 200
 
 
@@ -233,14 +314,14 @@ def get_approval(image_key):
 def approve_image(image_key):
     if request.method == "OPTIONS":
         return "", 204
-    
+
     approvals_set(image_key, True)
     add_event(
         event_type="Image Approved",
         message=f"Image '{image_key}' has been approved for deployment",
         details=f"Image key: {image_key}, Status: approved"
     )
-    logging.info(f"Image {image_key} approved")
+    log.info("Image %s approved", image_key)
     return jsonify({"ok": True, "image": image_key, "approved": True}), 200
 
 
@@ -248,12 +329,12 @@ def approve_image(image_key):
 def deny_image(image_key):
     if request.method == "OPTIONS":
         return "", 204
-    
+
     approvals_set(image_key, False)
     add_event(
         event_type="Image Denied",
         message=f"Image '{image_key}' has been denied and will be blocked",
         details=f"Image key: {image_key}, Status: denied"
     )
-    logging.info(f"Image {image_key} denied")
+    log.info("Image %s denied", image_key)
     return jsonify({"ok": True, "image": image_key, "approved": False}), 200

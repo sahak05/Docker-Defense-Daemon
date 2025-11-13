@@ -3,8 +3,9 @@ import docker
 import json
 import subprocess
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from utils import trivy_scan_image
+from typing import Optional
 
 from utils import retrieve_all_risks, persist_alert, generate_unique_id
 RED = "\033[91m"
@@ -24,7 +25,7 @@ events_lock = threading.Lock()
 MAX_EVENTS = 1000  # Keep last 1000 events
 
 
-def add_event(event_type: str, message: str, container: str = None, details: str = None):
+def add_event(event_type: str, message: str, container: Optional[str] = None, details: Optional[str] = None) -> None:
     """
     Add an event to the in-memory events store.
     
@@ -56,7 +57,7 @@ def add_event(event_type: str, message: str, container: str = None, details: str
             events_store = events_store[:MAX_EVENTS]
 
 
-def get_events(limit: int = 100, event_type: str = None, container: str = None):
+def get_events(limit: int = 100, event_type: Optional[str] = None, container: Optional[str] = None):
     """
     Retrieve events from the in-memory store with optional filtering.
     
@@ -138,7 +139,6 @@ def docker_event_listener():
     for event in client.api.events(decode=True):
         try:
             if event.get("Type") != "container":
-                # handle image pulls too
                 if event.get("Type") == "image" and event.get("Action") == "pull":
                     repo = (event.get("Actor", {}) or {}).get("Attributes", {}).get("name", "")
                     if repo:
@@ -154,82 +154,79 @@ def docker_event_listener():
             image_ref = attrs.get("image", "") or attrs.get("image.name", "")
             container_name = attrs.get("name", "") or cid
             metadata = {}
+            image_id = None
+            risks_mapping = None  
+
             try:
                 metadata = client.api.inspect_container(cid)
+                image_id = (metadata or {}).get("Image")
             except Exception:
                 pass
-            image_id = (metadata or {}).get("Image")  # sha256:...
 
             if action == "create":
-                # skip if not enforcing
                 mode = ((cfg.get("gate") or {}).get("mode") or "monitor").lower()
-                if (cfg.get("trivy", {}).get("enabled", True)) and mode == "enforce":
-                    # if there is a prior approval for this image digest, allow
+                trivy_enabled = cfg.get("trivy", {}).get("enabled", True)
+                container_blocked = False
+
+                if trivy_enabled and mode == "enforce":
                     key = image_id or image_ref
                     appr = approvals_get(key)
-                    if appr and appr.get("approved") is True:
-                        pass
-                    else:
+                    if not (appr and appr.get("approved") is True):
                         trivy_summary = trivy_scan_image(image_ref or "", image_id=image_id)
+
                         if policy_should_block(trivy_summary or {}, cfg):
-                            if (cfg.get("gate", {}).get("auto_remove_blocked_container", True)):
+                            logging.info(f"{RED}[Trivy] Blocking container {cid} due to high/critical vulnerabilities.")
+
+                            if cfg.get("gate", {}).get("auto_remove_blocked_container", True):
                                 try:
                                     client.api.remove_container(cid, force=True)
-                                except Exception:
-                                    pass
-                            # write a "blocked" alert
+                                    logging.info(f"{YELLOW}[Trivy] Container {cid} removed successfully.")
+                                except Exception as e:
+                                    logging.warning(f"{RED}[Trivy] Failed to remove container {cid}: {e}")
+
                             alert = {
                                 "source": "daemon",
-                                "timestamp": datetime.utcnow().isoformat()+"Z",
+                                "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                                 "rule": "image_blocked_by_trivy",
-                                "summary": f"Blocked container create: {image_ref} (digest {image_id})",
+                                "summary": f"Blocked container creation: {image_ref} (digest {image_id})",
                                 "severity": "high",
                                 "container": {"id": cid, "image": image_ref},
                                 "trivy": trivy_summary,
                                 "status": "blocked",
                             }
                             persist_alert(alert, "/app/alerts/alerts.jsonl")
-                            continue
+                            container_blocked = True
 
-            risks_mapping = retrieve_all_risks(cid, metadata, image_ref, action)
+                # Collect risk summary only if container was allowed
+                if not container_blocked:
+                    try:
+                        risks_mapping = retrieve_all_risks(cid, metadata, image_ref, action)
 
-            # attach trivy summary (cached or fresh)
-            if image_ref:
-                trivy_summary = trivy_scan_image(image_ref, image_id=image_id)
-                risks_mapping["trivy"] = trivy_summary or {"count":0}
+                        if image_ref:
+                            trivy_summary = trivy_scan_image(image_ref, image_id=image_id)
+                            risks_mapping["trivy"] = trivy_summary or {"count": 0}
 
-            persist_alert(risks_mapping, "/app/alerts/alerts.jsonl")
-            
-            # Track event based on action
+                        persist_alert(risks_mapping, "/app/alerts/alerts.jsonl")
+                    except Exception as e:
+                        logging.warning(f"[Daemon] Failed to persist risk mapping for {cid}: {e}")
+
+            # Track all actions
             if action == "start":
-                add_event(
-                    "Container Started",
-                    f"Container {container_name} started successfully",
-                    container=container_name,
-                    details=f"Image: {image_ref}"
-                )
+                add_event("Container Started", f"Container {container_name} started successfully", container=container_name, details=f"Image: {image_ref}")
             elif action == "restart":
-                add_event(
-                    "Container Restarted",
-                    f"Container {container_name} restarted",
-                    container=container_name,
-                    details=f"Image: {image_ref}"
-                )
+                add_event("Container Restarted", f"Container {container_name} restarted", container=container_name, details=f"Image: {image_ref}")
             elif action == "create":
-                add_event(
-                    "Container Created",
-                    f"Container {container_name} created",
-                    container=container_name,
-                    details=f"Image: {image_ref}"
-                )
+                add_event("Container Created", f"Container {container_name} created", container=container_name, details=f"Image: {image_ref}")
 
-            risks = risks_mapping.get("risks") or []
-            if risks:
+            # ✅ Safe access: only if risks_mapping was set
+            if risks_mapping and risks_mapping.get("risks"):
                 print(f"[!] Risks found for container {cid}:")
-                for r in risks:
+                for r in risks_mapping["risks"]:
                     print(f" - {r['rule']} ({r['severity']}): {r['description']}")
+
         except Exception as e:
             print(f"[WARN] event loop error: {e}")
+
 
 
 def analyze_container(cid, metadata_inspection, image, action):

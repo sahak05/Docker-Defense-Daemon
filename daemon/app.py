@@ -95,6 +95,3 @@ if __name__ == "__main__":
     # Run Flask
     from werkzeug.serving import run_simple
     run_simple("0.0.0.0", 8080, app, use_reloader=False)
-
-    
-    
