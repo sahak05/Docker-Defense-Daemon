@@ -13,6 +13,7 @@ falco:
   auto_stop_on_rules:
     - "Write below etc"
     - "Read sensitive file"
+    - "Read sensitive file untrusted"
     - "Outbound connection from container"
     - "Package manager activity in container"
     - "Ptrace syscall used"

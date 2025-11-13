@@ -5,6 +5,7 @@ import subprocess
 import logging
 from datetime import datetime, timezone
 from utils import trivy_scan_image
+from typing import Optional
 
 from utils import retrieve_all_risks, persist_alert, generate_unique_id
 RED = "\033[91m"
@@ -24,7 +25,7 @@ events_lock = threading.Lock()
 MAX_EVENTS = 1000  # Keep last 1000 events
 
 
-def add_event(event_type: str, message: str, container: str = None, details: str = None):
+def add_event(event_type: str, message: str, container: Optional[str] = None, details: Optional[str] = None) -> None:
     """
     Add an event to the in-memory events store.
     
@@ -56,7 +57,7 @@ def add_event(event_type: str, message: str, container: str = None, details: str
             events_store = events_store[:MAX_EVENTS]
 
 
-def get_events(limit: int = 100, event_type: str = None, container: str = None):
+def get_events(limit: int = 100, event_type: Optional[str] = None, container: Optional[str] = None):
     """
     Retrieve events from the in-memory store with optional filtering.
     
