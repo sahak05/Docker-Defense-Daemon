@@ -212,11 +212,11 @@ export const SystemStatusPage: React.FC = () => {
         />
 
         {/* Host Information Card */}
-        <HostInfoCard systemData={systemData} isLoading={isLoading} />
+        <HostInfoCard systemData={systemData} />
       </div>
 
       {/* System Resources Card */}
-      <SystemResourcesCard systemData={systemData} isLoading={isLoading} />
+      <SystemResourcesCard systemData={systemData} />
 
       {/* Docker Daemon Card */}
       <DockerDaemonCard />

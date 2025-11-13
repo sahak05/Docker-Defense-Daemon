@@ -224,25 +224,38 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
       {/* Main content */}
       <div className="lg:pl-64">
-        {/* Top bar */}
-        <header className={"sticky top-0 z-40 bg-background"}>
-          <div className="flex items-center justify-between px-4 py-3 sm:px-6">
+        {/* Top bar - only visible on mobile/tablet */}
+        <header className={"sticky top-0 z-40 bg-background lg:hidden"}>
+          <div
+            className="flex items-center justify-between px-4 py-3 sm:px-6 border-b"
+            style={{
+              borderColor: darkMode ? colors.border.dark : colors.border.light,
+            }}
+          >
             <button
               onClick={() => setSidebarOpen(true)}
-              className={"p-2 hover:bg-muted/50 rounded-lg lg:hidden"}
+              className={"p-2 hover:bg-muted/50 rounded-lg"}
             >
               <Menu className="h-5 w-5" />
             </button>
 
-            <div className="flex items-center gap-3 ml-auto">
+            <div className="flex items-center gap-2">
+              <Container
+                className="h-5 w-5"
+                color={darkMode ? colors.primary[300] : colors.primary[600]}
+              />
+              <span className="text-sm font-medium">Docker Monitor</span>
+            </div>
+
+            <div className="flex items-center gap-3">
               <button
                 onClick={handleToggle}
-                className={"hidden sm:flex p-2 hover:bg-muted/50 rounded"}
+                className={"p-2 hover:bg-muted/50 rounded"}
                 aria-label="Toggle theme"
               >
                 {darkMode ? (
                   <Sun
-                    size={22}
+                    size={20}
                     color={getColor("warning", "700", isDarkMode)}
                   />
                 ) : (
@@ -252,6 +265,26 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             </div>
           </div>
         </header>
+
+        {/* Desktop theme toggle - only visible on large screens */}
+        <div
+          className="hidden lg:flex items-center justify-end px-6 py-4 border-b"
+          style={{
+            borderColor: darkMode ? colors.border.dark : colors.border.light,
+          }}
+        >
+          <button
+            onClick={handleToggle}
+            className={"p-2 hover:bg-muted/50 rounded"}
+            aria-label="Toggle theme"
+          >
+            {darkMode ? (
+              <Sun size={22} color={getColor("warning", "700", isDarkMode)} />
+            ) : (
+              <Moon className="h-5 w-5 text-foreground" />
+            )}
+          </button>
+        </div>
 
         {/* Page content */}
         <main className="p-4 sm:p-6 lg:p-8">{children}</main>

@@ -10,16 +10,12 @@ import type { SystemStatus } from "../../../types/dashboard";
 
 interface HostInfoCardProps {
   systemData: SystemStatus | null;
-  isLoading: boolean;
 }
 
 const subClass = "text-muted-foreground";
 const valueClass = "text-foreground";
 
-export const HostInfoCard: React.FC<HostInfoCardProps> = ({
-  systemData,
-  isLoading,
-}) => {
+export const HostInfoCard: React.FC<HostInfoCardProps> = ({ systemData }) => {
   return (
     <Card>
       <CardHeader>

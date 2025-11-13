@@ -22,7 +22,6 @@ interface DaemonStatusCardProps {
   onStop: () => void;
 }
 
-const headingClass = "text-foreground mb-1";
 const subClass = "text-muted-foreground";
 const valueClass = "text-foreground";
 

@@ -24,11 +24,6 @@ alerts_bp = Blueprint("alerts", __name__)
 log = logging.getLogger(__name__)
 
 
-@alerts_bp.route("/", methods=["GET"])
-def root():
-    return 'Welcome to Docker Defense Daemon!', 200
-
-
 @alerts_bp.route("/health", methods=["GET"])
 def health():
     return "OK", 200
