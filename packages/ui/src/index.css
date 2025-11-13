@@ -1,5 +1,2 @@
-@import "tailwindcss/preflight";
-@import "tailwindcss/theme";
-@import "tailwindcss/utilities";
-
-@import "./styles//globals.css";
+@import "tailwindcss";
+@import "./styles/globals.css";
