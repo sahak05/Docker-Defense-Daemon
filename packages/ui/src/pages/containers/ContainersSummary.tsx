@@ -12,7 +12,10 @@ export const ContainersSummary: React.FC<ContainersSummaryProps> = ({
   containers,
 }) => {
   const runningCount = containers.filter((c) => c.status === "running").length;
-  const stoppedCount = containers.filter((c) => c.status === "exited").length;
+  const stoppedCount = containers.filter(
+    (c) =>
+      c.status === "exited" || c.status === "created" || c.status === "dead"
+  ).length;
   const pausedCount = containers.filter((c) => c.status === "paused").length;
 
   return (

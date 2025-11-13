@@ -42,6 +42,33 @@ export async function getContainers() {
 }
 
 /**
+ * Fetch container images from backend
+ */
+export async function getContainerImages(): Promise<
+  Array<{
+    imageKey: string;
+    imageName: string;
+    approved: boolean;
+    lastUpdated: string | null;
+  }>
+> {
+  try {
+    const images = await apiFetch<
+      Array<{
+        imageKey: string;
+        imageName: string;
+        approved: boolean;
+        lastUpdated: string | null;
+      }>
+    >("/containers/images/list");
+    return images;
+  } catch (error) {
+    console.error("Error fetching container images:", error);
+    throw error;
+  }
+}
+
+/**
  * Fetch events from backend and transform to frontend format
  */
 export async function getEvents(
@@ -69,7 +96,14 @@ export interface TransformedContainer {
   id: string;
   name: string;
   image: string;
-  status: "running" | "exited" | "paused";
+  status:
+    | "running"
+    | "exited"
+    | "paused"
+    | "created"
+    | "dead"
+    | "restarting"
+    | string;
   uptime: string;
   cpu: number;
   memory: number;
@@ -140,7 +174,7 @@ export function transformBackendAlerts(
         type: maxSeverityRisk.rule || "Container Risk Detected",
         severity: mapSeverity(maxSeverityRisk.severity),
         container: alert.metadata.id?.substring(0, 12) || "unknown",
-        status: "new",
+        status: alert.status || "new",
         description:
           maxSeverityRisk.description || "Container has detected risks",
         details: formatContainerRisks(alert.risks),
@@ -155,7 +189,7 @@ export function transformBackendAlerts(
       type: alert.type || "Alert",
       severity: "info",
       container: alert.container || "unknown",
-      status: "new",
+      status: alert.status || "new",
       description: alert.description || JSON.stringify(alert).substring(0, 100),
       details: "Unable to parse alert details",
       suggestedAction: "Review alert details for more information",
@@ -523,6 +557,89 @@ export async function getSystemStatus(): Promise<SystemStatus> {
     return transformed;
   } catch (error) {
     console.error("Error fetching system status:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get Docker daemon information including images, volumes, and networks
+ */
+export async function getDockerDaemonInfo(): Promise<{
+  images: { total: number; sizeGb: number };
+  volumes: { total: number };
+  networks: { total: number; bridge: number; custom: number };
+  timestamp: string;
+}> {
+  try {
+    const response = await apiFetch<any>("/docker-daemon", {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    // Transform snake_case from backend to camelCase for frontend
+    return {
+      images: {
+        total: response.images?.total || 0,
+        sizeGb: response.images?.size_gb || 0,
+      },
+      volumes: {
+        total: response.volumes?.total || 0,
+      },
+      networks: {
+        total: response.networks?.total || 0,
+        bridge: response.networks?.bridge || 0,
+        custom: response.networks?.custom || 0,
+      },
+      timestamp: response.timestamp || new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error("Error fetching Docker daemon info:", error);
+    throw error;
+  }
+}
+
+/**
+ * Restart the daemon (graceful shutdown, will be restarted by docker-compose)
+ */
+export async function restartDaemon(): Promise<{
+  status: string;
+}> {
+  try {
+    const response = await apiFetch<{
+      status: string;
+    }>("/daemon/restart", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    return response;
+  } catch (error) {
+    console.error("Error restarting daemon:", error);
+    throw error;
+  }
+}
+
+/**
+ * Stop the daemon (graceful shutdown)
+ */
+export async function stopDaemon(): Promise<{
+  status: string;
+}> {
+  try {
+    const response = await apiFetch<{
+      status: string;
+    }>("/daemon/stop", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    return response;
+  } catch (error) {
+    console.error("Error stopping daemon:", error);
     throw error;
   }
 }
