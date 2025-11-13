@@ -1,0 +1,40 @@
+- rule: Write below etc
+  desc: An attempt to write to any file below /etc
+  condition: evt.type = write and fd.name startswith /etc
+  output: >
+    Write below /etc detected (user=%user.name command=%proc.cmdline file=%fd.name)
+  priority: WARNING
+  tags: [filesystem, mitre_persistence]
+
+- rule: Read sensitive file
+  desc: Someone is reading sensitive files like /etc/passwd
+  condition: evt.type=read and fd.name contains /etc/shadow
+  output: >
+    Sensitive file read (command=%proc.cmdline file=%fd.name user=%user.name)
+  priority: WARNING
+  tags: [filesystem, mitre_discovery]
+
+- rule: Outbound connection from container
+  desc: Detects outbound internet connections from a container (non‑DNS)
+  condition: evt.type=connect and fd.sip != 127.0.0.1 and fd.sport > 1024 and fd.name != /etc/resolv.conf and container.id != host
+  output: >
+    Outbound connection from container (container=%container.id command=%proc.cmdline ip=%fd.sip port=%fd.sport)
+  priority: NOTICE
+  tags: [network, container]
+
+- rule: Package manager activity in container
+  desc: Detects use of package managers inside containers
+  condition: evt.type=execve and container.id != host and proc.name in (apt, apt-get, yum, dnf, apk, zypper)
+  output: >
+    Package manager used inside container (container=%container.id user=%user.name command=%proc.cmdline)
+  priority: WARNING
+  tags: [container, package_mgmt, mitre_persistence]
+
+
+- rule: Ptrace syscall used
+  desc: Detect usage of ptrace which may indicate debugging or process injection
+  condition: evt.type = ptrace
+  output: >
+    Ptrace syscall used (user=%user.name command=%proc.cmdline pid=%proc.pid)
+  priority: ERROR
+  tags: [syscall, mitre_defense_evasion]
