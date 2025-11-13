@@ -11,6 +11,11 @@ gate:
 
 falco:
   auto_stop_on_rules:
-    - "Terminal shell in container"
-    - "Cat etc passwd"
+    - "Write below etc"
+    - "Read sensitive file"
+    - "Read sensitive file untrusted"
+    - "Outbound connection from container"
+    - "Package manager activity in container"
+    - "Ptrace syscall used"
+    - "Root running unknown binary"
   stop_grace_seconds: 5
