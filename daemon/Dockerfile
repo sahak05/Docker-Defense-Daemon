@@ -12,7 +12,7 @@ COPY yarn.lock ./
 COPY packages/ui/tsconfig*.json ./packages/ui/
 COPY packages/ui/vite.config.ts ./packages/ui/
 COPY packages/ui/tailwind.config.js ./packages/ui/
-COPY postcss.config.js ./
+COPY postcss.config.cjs ./
 COPY packages/ui/index.html ./packages/ui/
 
 # Install dependencies

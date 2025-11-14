@@ -210,15 +210,12 @@ def docker_event_listener():
                     except Exception as e:
                         logging.warning(f"[Daemon] Failed to persist risk mapping for {cid}: {e}")
 
-            # Track all actions
             if action == "start":
                 add_event("Container Started", f"Container {container_name} started successfully", container=container_name, details=f"Image: {image_ref}")
             elif action == "restart":
                 add_event("Container Restarted", f"Container {container_name} restarted", container=container_name, details=f"Image: {image_ref}")
             elif action == "create":
                 add_event("Container Created", f"Container {container_name} created", container=container_name, details=f"Image: {image_ref}")
-
-            # ✅ Safe access: only if risks_mapping was set
             if risks_mapping and risks_mapping.get("risks"):
                 print(f"[!] Risks found for container {cid}:")
                 for r in risks_mapping["risks"]:
