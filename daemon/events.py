@@ -151,12 +151,14 @@ def docker_event_listener():
 
             cid = (event.get("id") or "")[:12]
             attrs = event.get("Actor", {}).get("Attributes", {}) or {}
+            c_image = event.get("Actor", {}).get("Attributes", {}).get("image", "")
             image_ref = attrs.get("image", "") or attrs.get("image.name", "")
             container_name = attrs.get("name", "") or cid
             metadata = {}
             image_id = None
             risks_mapping = None  
-
+            print(f"{GREEN}[INFO] [Docker Listener]{RESET} {cid} on event {event['Action']} with image ({c_image})\n")
+            
             try:
                 metadata = client.api.inspect_container(cid)
                 image_id = (metadata or {}).get("Image")
@@ -202,6 +204,13 @@ def docker_event_listener():
                     try:
                         risks_mapping = retrieve_all_risks(cid, metadata, image_ref, action)
 
+                        print(f"Result from the inspect on container {cid} \n {json.dumps(risks_mapping['metadata'], indent=2)} \n")
+                       
+                        if risks_mapping["risks"]:
+                            print(f"[!] Risks found for container {cid}:")
+                            for r in risks_mapping["risks"]:
+                                print(f"{RED} - {r['rule']} ({r['severity']}){RESET}: {r['description']}")
+                                
                         if image_ref:
                             trivy_summary = trivy_scan_image(image_ref, image_id=image_id)
                             risks_mapping["trivy"] = trivy_summary or {"count": 0}
