@@ -12,7 +12,8 @@ import threading
 
 _CONFIG = None
 _APPROVALS = {}    
-_TRIVY_CACHE = {}
+_TRIVY_CACHE = {}  # key -> {"ts": datetime, "summary": dict}
+_TRIVY_TTL_SECONDS = int(os.environ.get("TRIVY_CACHE_TTL", "3600"))
 _APPROVALS_LOCK = threading.Lock()
 
 APPROVALS_FILE = os.environ.get("APPROVALS_FILE", "/app/alerts/approvals.jsonl")
@@ -46,10 +47,15 @@ def deduplicate_alerts(alerts: list) -> list:
     """
     Deduplicate alerts by ID, keeping the first occurrence.
     This prevents duplicate alerts from being returned to the frontend.
+    Also filters out non-alert entries (like audit logs) that may have been mixed in.
     """
     seen = set()
     unique_alerts = []
     for alert in alerts:
+        # Skip entries that are audit logs (have alert_id but not id, or have "action" field)
+        if "alert_id" in alert or ("action" in alert and "id" not in alert):
+            continue
+            
         alert_id = alert.get("id")
         if alert_id and alert_id not in seen:
             seen.add(alert_id)
@@ -248,15 +254,41 @@ def retrieve_all_risks(cid, metadata, image, action):
 
 def persist_alert(alert_json, file_path=ALERTS_FILE):
     try:
-        # Use alerts_store append functionality and then compact the file to remove duplicates.
+        def _is_probably_container_id(value: str) -> bool:
+            if not isinstance(value, str):
+                return False
+            v = value.lower()
+            if len(v) not in (12, 64):
+                return False
+            import string
+            return all(ch in string.hexdigits for ch in v)
+
+        # Ensure a canonical, stable unique ID for each alert record
+        existing_id = alert_json.get("id")
+        if not existing_id or _is_probably_container_id(existing_id):
+            old_containerish = existing_id
+            new_id = generate_unique_id()
+            alert_json["id"] = new_id
+            # Preserve the original container-ish id under container.id if missing
+            try:
+                if old_containerish:
+                    if isinstance(alert_json.get("container"), dict):
+                        alert_json["container"].setdefault("id", old_containerish)
+                    else:
+                        alert_json["container"] = {"id": old_containerish}
+            except Exception:
+                pass
+
+        # Ensure timestamp exists
+        alert_json.setdefault("timestamp", datetime.utcnow().isoformat() + "Z")
+
+        # Append and compact
         alerts_store.append_alert(alert_json, file_path)
-        cid = alert_json.get("id") or alert_json.get("container", {}).get("id") or alert_json.get("metadata", {}).get("id")
+        cid = alert_json.get("container", {}).get("id") or alert_json.get("metadata", {}).get("id")
         log.info("Persisted alert%s to %s", f" for container {cid}" if cid else "", file_path)
-        # Compact the alerts file to ensure duplicate IDs are removed and only the newest kept.
         try:
             alerts_store.compact_alerts_file(file_path)
         except Exception:
-            # Don't fail the whole persist if compaction has an issue. Log and continue.
             log.exception("Failed to compact alerts file after append")
     except Exception as e:
         log.exception("Failed to persist alert: %s", e)
@@ -321,7 +353,10 @@ def trivy_scan_image(image_ref: str, image_id: str | None = None, timeout_sec: i
 
     cache_key = image_id or image_ref
     if cache_key in _TRIVY_CACHE:
-        return _TRIVY_CACHE[cache_key]
+        entry = _TRIVY_CACHE.get(cache_key) or {}
+        ts = entry.get("ts")
+        if ts and (datetime.utcnow() - ts).total_seconds() < _TRIVY_TTL_SECONDS:
+            return entry.get("summary")
 
     try:
         out = subprocess.check_output(
@@ -343,7 +378,7 @@ def trivy_scan_image(image_ref: str, image_id: str | None = None, timeout_sec: i
             "high_or_critical": sum(1 for x in vulns if x.get("sev") in ("HIGH","CRITICAL")),
             "sample": vulns[:5],
         }
-        _TRIVY_CACHE[cache_key] = summary
+        _TRIVY_CACHE[cache_key] = {"ts": datetime.utcnow(), "summary": summary}
         return summary
 
     except FileNotFoundError:

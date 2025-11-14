@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { DashboardData } from "../types/dashboard";
 import { getDashboardData } from "../utils/dashboard";
-import { ensureUniqueIds } from "../utils/dataValidation";
+import { deduplicateById } from "../utils/dataValidation";
 
 /**
  * useDashboardData hook
@@ -45,9 +45,9 @@ export const useDashboardData = () => {
       // Ensure unique IDs for list items to prevent React key warnings
       const cleanedData = {
         ...data.data,
-        recentAlerts: ensureUniqueIds(data.data.recentAlerts || []),
-        topContainers: ensureUniqueIds(data.data.topContainers || []),
-        recentActivity: ensureUniqueIds(data.data.recentActivity || []),
+        recentAlerts: deduplicateById(data.data.recentAlerts || []),
+        topContainers: deduplicateById(data.data.topContainers || []),
+        recentActivity: deduplicateById(data.data.recentActivity || []),
       };
 
       setDashboardData(cleanedData);

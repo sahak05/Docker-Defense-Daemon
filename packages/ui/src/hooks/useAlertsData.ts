@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getAlerts } from "../utils/dashboard";
 import type { TransformedAlert } from "../utils/dashboard";
-import { ensureUniqueIds } from "../utils/dataValidation";
+import { deduplicateById } from "../utils/dataValidation";
 
 /**
  * useAlertsData hook
@@ -38,8 +38,8 @@ export const useAlertsData = (autoRefreshMs?: number) => {
 
       if (!isMountedRef.current) return;
 
-      // Ensure unique IDs for list items to prevent React key warnings
-      const cleanedData = ensureUniqueIds(data || []);
+      // Deduplicate by ID (backend should already do this, but as safety measure)
+      const cleanedData = deduplicateById(data || []);
 
       setAlerts(cleanedData);
       setError(null);

@@ -19,6 +19,7 @@ from utils import (
     deduplicate_alerts,
     find_alert_by_id_or_base,
 )
+from alerts_store import read_alerts, write_alerts, append_alert
 
 alerts_bp = Blueprint("alerts", __name__)
 log = logging.getLogger(__name__)
@@ -36,13 +37,7 @@ def list_alerts():
     if not ALERTS_FILE or not os.path.exists(ALERTS_FILE):
         return jsonify([]), 200
     try:
-        rows = []
-        with open(ALERTS_FILE, "r", encoding="utf-8") as f:
-            for line in f:
-                try:
-                    rows.append(json.loads(line))
-                except Exception:
-                    continue
+        rows = read_alerts(ALERTS_FILE)
         rows = list(reversed(rows))
         rows = deduplicate_alerts(rows)[:limit]
         return jsonify(rows), 200
@@ -51,17 +46,7 @@ def list_alerts():
         return jsonify({"error": str(e)}), 500
 
 
-def _read_alerts_file(alerts_file):
-    alerts = []
-    if not alerts_file or not os.path.exists(alerts_file):
-        return alerts
-    with open(alerts_file, "r", encoding="utf-8") as f:
-        for line in f:
-            try:
-                alerts.append(json.loads(line))
-            except Exception:
-                continue
-    return alerts
+AUDIT_FILE = os.environ.get("AUDIT_FILE", "/app/alerts/audits.jsonl")
 
 
 @alerts_bp.route("/api/alerts/<alert_id>/acknowledge", methods=["POST", "OPTIONS"])
@@ -77,7 +62,7 @@ def acknowledge_alert(alert_id):
         if not os.path.exists(ALERTS_FILE):
             return jsonify({"error": "Alerts file not found"}), 404
 
-        alerts = _read_alerts_file(ALERTS_FILE)
+        alerts = read_alerts(ALERTS_FILE)
         alert, alert_index = find_alert_by_id_or_base(alerts, alert_id)
         if alert is None:
             log.warning("Alert %s not found in alerts.jsonl", alert_id)
@@ -86,10 +71,8 @@ def acknowledge_alert(alert_id):
         alert["status"] = "acknowledged"
         alerts[alert_index] = alert
 
-        # Write back updated alerts
-        with open(ALERTS_FILE, "w", encoding="utf-8") as f:
-            for a in alerts:
-                f.write(json.dumps(a) + "\n")
+        # Write back updated alerts via store
+        write_alerts(alerts, ALERTS_FILE)
 
         # Append audit line
         audit_entry = {
@@ -99,8 +82,7 @@ def acknowledge_alert(alert_id):
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "source": "api",
         }
-        with open(ALERTS_FILE, "a", encoding="utf-8") as f:
-            f.write(json.dumps(audit_entry) + "\n")
+        append_alert(audit_entry, AUDIT_FILE)
 
         log.info("Alert %s acknowledged (original_id: %s)", alert_id, alert.get("id"))
         return jsonify({"status": "acknowledged", "alert_id": alert_id}), 200
@@ -122,7 +104,7 @@ def resolve_alert(alert_id):
         if not os.path.exists(ALERTS_FILE):
             return jsonify({"error": "Alerts file not found"}), 404
 
-        alerts = _read_alerts_file(ALERTS_FILE)
+        alerts = read_alerts(ALERTS_FILE)
         alert, alert_index = find_alert_by_id_or_base(alerts, alert_id)
         if alert is None:
             log.warning("Alert %s not found in alerts.jsonl", alert_id)
@@ -131,9 +113,7 @@ def resolve_alert(alert_id):
         alert["status"] = "resolved"
         alerts[alert_index] = alert
 
-        with open(ALERTS_FILE, "w", encoding="utf-8") as f:
-            for a in alerts:
-                f.write(json.dumps(a) + "\n")
+        write_alerts(alerts, ALERTS_FILE)
 
         audit_entry = {
             "alert_id": alert_id,
@@ -142,13 +122,53 @@ def resolve_alert(alert_id):
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "source": "api",
         }
-        with open(ALERTS_FILE, "a", encoding="utf-8") as f:
-            f.write(json.dumps(audit_entry) + "\n")
+        append_alert(audit_entry, AUDIT_FILE)
 
         log.info("Alert %s resolved (original_id: %s)", alert_id, alert.get("id"))
         return jsonify({"status": "resolved", "alert_id": alert_id}), 200
     except Exception as e:
         log.exception("Failed to resolve alert %s", alert_id)
+        return jsonify({"error": str(e)}), 500
+
+
+@alerts_bp.route("/api/alerts/<alert_id>", methods=["PATCH", "OPTIONS"])
+def update_alert_status(alert_id):
+    if request.method == "OPTIONS":
+        return "", 204
+
+    ALERTS_FILE = current_app.config.get("ALERTS_FILE")
+    if not ALERTS_FILE:
+        return jsonify({"error": "alerts file not configured"}), 500
+
+    try:
+        body = request.get_json(silent=True) or {}
+        new_status = (body.get("status") or "").strip().lower()
+        if new_status not in ("acknowledged", "resolved", "open"):
+            return jsonify({"error": "invalid status", "detail": new_status}), 400
+
+        if not os.path.exists(ALERTS_FILE):
+            return jsonify({"error": "Alerts file not found"}), 404
+
+        alerts = read_alerts(ALERTS_FILE)
+        alert, idx = find_alert_by_id_or_base(alerts, alert_id)
+        if alert is None:
+            return jsonify({"error": f"Alert {alert_id} not found"}), 404
+
+        alert["status"] = new_status
+        alerts[idx] = alert
+        write_alerts(alerts, ALERTS_FILE)
+
+        append_alert({
+            "alert_id": alert_id,
+            "original_id": alert.get("id"),
+            "action": f"status:{new_status}",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "source": "api",
+        }, AUDIT_FILE)
+
+        return jsonify({"status": new_status, "alert_id": alert_id}), 200
+    except Exception as e:
+        log.exception("Failed to update alert %s", alert_id)
         return jsonify({"error": str(e)}), 500
 
 

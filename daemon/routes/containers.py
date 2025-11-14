@@ -53,8 +53,13 @@ def list_container_inspections():
             if "metadata" not in rec or "risks" not in rec:
                 continue
 
-            if id_prefix and not str(rec.get("id", "")).startswith(id_prefix):
-                continue
+            # Accept match against alert unique id, container id in metadata, or container.id
+            if id_prefix:
+                alert_id = str(rec.get("id", ""))
+                meta_cid = str((rec.get("metadata", {}) or {}).get("id", ""))
+                cont_cid = str((rec.get("container", {}) or {}).get("id", ""))
+                if not (alert_id.startswith(id_prefix) or meta_cid.startswith(id_prefix) or cont_cid.startswith(id_prefix)):
+                    continue
             if image_filter and image_filter != str(rec.get("image", "")):
                 continue
             if action_filter and action_filter != str(rec.get("action", "")):
@@ -178,7 +183,7 @@ def stop_container(container_id):
             "status": "stopped",
             "id": container.short_id,
             "name": container.name,
-            "image": container.image.tags,
+            "image": container.image.tags[0] if container.image.tags else "unknown",
             "message": f"Container {container.short_id} stopped successfully.",
         }), 200
 
@@ -211,7 +216,7 @@ def start_container(container_id):
             "status": "started",
             "id": container.short_id,
             "name": container.name,
-            "image": container.image.tags,
+            "image": container.image.tags[0] if container.image.tags else "unknown",
             "message": f"Container {container.short_id} started successfully.",
         }), 200
 
@@ -244,7 +249,7 @@ def restart_container(container_id):
             "status": "restarted",
             "id": container.short_id,
             "name": container.name,
-            "image": container.image.tags,
+            "image": container.image.tags[0] if container.image.tags else "unknown",
             "message": f"Container {container.short_id} restarted successfully.",
         }), 200
 

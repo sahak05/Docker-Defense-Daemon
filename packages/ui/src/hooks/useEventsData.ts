@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getEvents } from "../utils/dashboard";
 import type { TransformedEvent } from "../utils/dashboard";
-import { ensureUniqueIds } from "../utils/dataValidation";
+import { deduplicateById } from "../utils/dataValidation";
 
 /**
  * useEventsData hook
@@ -44,8 +44,8 @@ export const useEventsData = (
 
       if (!isMountedRef.current) return;
 
-      // Ensure unique IDs for list items to prevent React key warnings
-      const cleanedData = ensureUniqueIds(data || []);
+      // Deduplicate by ID (backend should already do this, but as safety measure)
+      const cleanedData = deduplicateById(data || []);
 
       setEvents(cleanedData);
       setError(null);

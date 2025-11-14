@@ -1,5 +1,12 @@
 import React from "react";
-import { Activity, RefreshCw, StopCircle, CheckCircle2 } from "lucide-react";
+import {
+  Activity,
+  RefreshCw,
+  StopCircle,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+} from "lucide-react";
 import {
   Card,
   CardContent,
@@ -30,6 +37,43 @@ export const DaemonStatusCard: React.FC<DaemonStatusCardProps> = ({
   onRestart,
   onStop,
 }) => {
+  // Determine status color and icon based on daemon status
+  const getStatusConfig = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "running":
+        return {
+          backgroundColor: colors.success[50],
+          color: colors.success[700],
+          borderColor: colors.success[200],
+          icon: CheckCircle2,
+        };
+      case "error":
+        return {
+          backgroundColor: colors.error[50],
+          color: colors.error[700],
+          borderColor: colors.error[200],
+          icon: XCircle,
+        };
+      case "unavailable":
+        return {
+          backgroundColor: colors.neutral[50],
+          color: colors.neutral[700],
+          borderColor: colors.neutral[200],
+          icon: AlertCircle,
+        };
+      default:
+        return {
+          backgroundColor: colors.neutral[50],
+          color: colors.neutral[700],
+          borderColor: colors.neutral[200],
+          icon: AlertCircle,
+        };
+    }
+  };
+
+  const statusConfig = getStatusConfig(daemonInfo.status);
+  const StatusIcon = statusConfig.icon;
+
   return (
     <Card>
       <CardHeader>
@@ -44,12 +88,12 @@ export const DaemonStatusCard: React.FC<DaemonStatusCardProps> = ({
           <Badge
             variant="outline"
             style={{
-              backgroundColor: colors.success[50],
-              color: colors.success[700],
-              borderColor: colors.success[200],
+              backgroundColor: statusConfig.backgroundColor,
+              color: statusConfig.color,
+              borderColor: statusConfig.borderColor,
             }}
           >
-            <CheckCircle2 className="h-3 w-3 mr-1" />
+            <StatusIcon className="h-3 w-3 mr-1" />
             {daemonInfo.status}
           </Badge>
         </div>

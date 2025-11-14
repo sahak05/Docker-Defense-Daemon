@@ -16,16 +16,14 @@ This security daemon provides:
 
 ```
 ┌─────────────────────────────────────┐
-│   Multi-Stage Docker Build          │
+│   Runtime Image (Python only)       │
 │                                     │
-│  Stage 1: Node.js (UI Builder)     │
-│  - yarn install                     │
-│  - yarn build (Vite)                │
-│  - Output: /build/packages/ui/build │
+│  Build UI on host (Vite)            │
+│  - npm ci && npm run build          │
+│  - Output: packages/ui/build        │
 │                                     │
-│  Stage 2: Python (Backend)          │
-│  - Copy built UI → ./static         │
-│  - Flask serves UI + API            │
+│  Image copies UI → ./static         │
+│  Flask serves UI + API              │
 └─────────────────┬───────────────────┘
                   │ Port 8080
          ┌────────▼────────┐
@@ -48,7 +46,7 @@ This security daemon provides:
 
 - Docker Desktop (Windows/Mac) or Docker Engine 20.10+ (Linux)
 - Docker Compose v2.0+
-- Node.js 18+ & Yarn (for UI development)
+- Node.js 18+ & npm (only for UI rebuilds)
 - **Note:** Falco works best on Linux. Windows/Mac users may experience limited Falco functionality
 
 ### Installation Links
@@ -59,12 +57,12 @@ This security daemon provides:
 
 ## 🚀 Quick Start
 
-### Production Mode (Recommended)
+See also: `./QuickStart.md` for concise commands and guidance.
 
-The application uses a **multi-stage Docker build** that automatically builds the React UI and serves it via Flask:
+### Compose (Recommended)
 
-```bash
-# Build and start all services (includes UI build)
+```powershell
+# Build and start all services (uses host-built UI)
 docker compose up -d --build
 
 # View logs in real-time
@@ -74,31 +72,34 @@ docker compose logs -f
 docker compose down
 ```
 
-**Access the application at:** `http://localhost:8080`
+Access the app at `http://localhost:8080`.
 
-✨ **No separate UI build needed!** The Docker build process:
+If you changed the UI, rebuild locally first:
 
-1. Builds the React UI using Node.js and Yarn
-2. Copies the built assets to the Flask backend
-3. Serves everything from a single container on port 8080
+```powershell
+cd packages/ui
+npm ci
+npm run build
+cd ../..
+```
 
 ### Development Mode (UI Hot Reload)
 
 For UI development with instant hot reload:
 
-```bash
+```powershell
 # Terminal 1: Start backend services
 docker compose up -d
 
 # Terminal 2: Start UI dev server
 cd packages/ui
-yarn install  # First time only
-yarn dev
+npm install  # First time only (or npm ci if lockfile exists)
+npm run dev
 ```
 
 The dev UI will be available at `http://localhost:5173` with hot reload enabled.
 
-**Note:** In dev mode, the UI dev server proxies API calls to the Flask backend at `http://localhost:8080`
+**Note:** In dev mode, the UI dev server proxies API calls to the Flask backend at `http://localhost:8080`.
 
 ## 🧪 Testing the System
 
@@ -166,11 +167,11 @@ docker rm -f test_all_risks
 docker-defense-daemon/
 ├── daemon/              # Flask backend + Docker SDK
 │   ├── app.py          # Main daemon logic (serves UI + API)
-│   ├── Dockerfile      # Multi-stage build (Node + Python)
+│   ├── Dockerfile      # Runtime-only image (Python + Trivy)
 │   ├── requirements.txt
 │   ├── routes/         # API blueprints
-│   └── static/         # Built UI assets (created during Docker build)
-├── packages/ui/         # React frontend (Yarn workspace)
+│   └── static/         # Built UI assets (copied from host)
+├── packages/ui/         # React frontend (Vite + React)
 │   ├── src/            # React components, pages, hooks
 │   ├── package.json
 │   ├── vite.config.ts
@@ -181,8 +182,7 @@ docker-defense-daemon/
 │   ├── alerts.jsonl
 │   └── approvals.jsonl
 ├── docker-compose.yml  # Multi-container orchestration
-├── yarn.lock           # Yarn lockfile (used in Docker build)
-├── postcss.config.js   # PostCSS config (used in Docker build)
+├── postcss.config.cjs  # PostCSS/Tailwind config
 └── documentations/     # Project documentation
 ```
 
@@ -237,13 +237,14 @@ yarn dev      # Runs on http://localhost:5173
 
 ### UI Production Build (Standalone)
 
-```bash
-# Build UI locally (optional, Docker does this automatically)
+```powershell
+# Build UI locally (required before image copy)
 cd packages/ui
-yarn build
+npm ci
+npm run build
 
-# Preview production build
-yarn preview
+# Preview production build (optional)
+npm run preview
 ```
 
 ### Viewing Logs
@@ -277,16 +278,17 @@ rules:
 
 Custom rules are defined in `falco/falco_rules.yaml`. Refer to [Falco documentation](https://falco.org/docs/) for rule syntax.
 
-## 🛠️ API Endpoints
+## 🛠️ API Endpoints (updated)
 
 ### Alert Management
 
-| Endpoint                   | Method | Description               |
-| -------------------------- | ------ | ------------------------- |
-| `/api/alerts`              | GET    | Fetch all security alerts |
-| `/api/alerts/<id>/ack`     | POST   | Acknowledge an alert      |
-| `/api/alerts/<id>/resolve` | POST   | Resolve an alert          |
-| `/api/falco-alert`         | POST   | Receive alerts from Falco |
+| Endpoint                       | Method | Description                            |
+| ------------------------------ | ------ | -------------------------------------- |
+| `/api/alerts`                  | GET    | Fetch all security alerts              |
+| `/api/alerts/<id>/acknowledge` | POST   | Acknowledge an alert                   |
+| `/api/alerts/<id>/resolve`     | POST   | Resolve an alert                       |
+| `/api/alerts/<id>`             | PATCH  | Set status: acknowledged/resolved/open |
+| `/api/falco-alert`             | POST   | Receive alerts from Falco              |
 
 ### Container Management
 
@@ -308,7 +310,7 @@ Custom rules are defined in `falco/falco_rules.yaml`. Refer to [Falco documentat
 
 | Endpoint              | Method | Description                   |
 | --------------------- | ------ | ----------------------------- |
-| `/api/system/status`  | GET    | Get system health and metrics |
+| `/api/system-status`  | GET    | Get system health and metrics |
 | `/api/daemon/restart` | POST   | Restart the daemon            |
 | `/api/daemon/stop`    | POST   | Stop the daemon               |
 
