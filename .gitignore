@@ -216,3 +216,7 @@ coverage/
 
 # Media / assets build output
 public/build/
+
+# Runtime data files (alerts, events, audits)
+alerts/*.jsonl
+!alerts/.gitkeep
