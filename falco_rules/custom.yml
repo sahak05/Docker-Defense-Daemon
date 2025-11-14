@@ -1,40 +1,48 @@
 - rule: Write below etc
   desc: An attempt to write to any file below /etc
-  condition: evt.type = write and fd.name startswith /etc
+  condition: container and evt.type = write and fd.name startswith /etc
   output: >
     Write below /etc detected (user=%user.name command=%proc.cmdline file=%fd.name)
   priority: WARNING
   tags: [filesystem, mitre_persistence]
 
 - rule: Read sensitive file
-  desc: Someone is reading sensitive files like /etc/passwd
-  condition: evt.type=read and fd.name contains /etc/shadow
+  desc: Someone is reading sensitive files like /etc/shadow or SSH keys
+  condition: container and evt.type = read and (fd.name contains /etc/shadow or fd.name contains /etc/passwd or fd.name contains /root/.ssh or fd.name contains /home/.*/.ssh)
   output: >
-    Sensitive file read (command=%proc.cmdline file=%fd.name user=%user.name)
+    Sensitive file read (command=%proc.cmdline file=%fd.name user=%user.name container=%container.name)
   priority: WARNING
   tags: [filesystem, mitre_discovery]
 
-- rule: Outbound connection from container
-  desc: Detects outbound internet connections from a container (non‑DNS)
-  condition: evt.type=connect and fd.sip != 127.0.0.1 and fd.sport > 1024 and fd.name != /etc/resolv.conf and container.id != host
+- rule: Suspicious Download Tool In Container
+  desc: Detect execution of common download tools (curl/wget) inside containers fetching remote resources
+  condition: container and evt.type = execve and proc.name in (curl, wget) and (proc.cmdline contains "http://" or proc.cmdline contains "https://" or proc.cmdline contains "ftp://")
   output: >
-    Outbound connection from container (container=%container.id command=%proc.cmdline ip=%fd.sip port=%fd.sport)
+    Suspicious download tool in container (proc=%proc.name user=%user.name container=%container.name image=%container.image cmdline=%proc.cmdline)
+  priority: WARNING
+  tags: [container, exec, download, mitre_initial_access]
+
+- rule: Outbound connection from container (refined)
+  desc: Detect outbound network connections from a container to non-local/non-loopback IPs (parser-friendly)
+  condition: >
+    container and evt.type = connect and not (fd.sip in (127.0.0.1, 0.0.0.0, ::1)) and fd.sport > 1023
+  output: >
+    Outbound connection from container (container=%container.id name=%container.name image=%container.image fd.sip=%fd.sip fd.sport=%fd.sport proc=%proc.cmdline)
   priority: NOTICE
   tags: [network, container]
 
 - rule: Package manager activity in container
   desc: Detects use of package managers inside containers
-  condition: evt.type=execve and container.id != host and proc.name in (apt, apt-get, yum, dnf, apk, zypper)
+  condition: container and evt.type = execve and proc.name in (apt, apt-get, yum, dnf, apk, zypper, pacman)
   output: >
     Package manager used inside container (container=%container.id user=%user.name command=%proc.cmdline)
   priority: WARNING
   tags: [container, package_mgmt, mitre_persistence]
 
-
 - rule: Ptrace syscall used
   desc: Detect usage of ptrace which may indicate debugging or process injection
-  condition: evt.type = ptrace
+  condition: container and evt.type = ptrace
   output: >
-    Ptrace syscall used (user=%user.name command=%proc.cmdline pid=%proc.pid)
+    Ptrace syscall used (user=%user.name command=%proc.cmdline pid=%proc.pid container=%container.name)
   priority: ERROR
   tags: [syscall, mitre_defense_evasion]

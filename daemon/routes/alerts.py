@@ -21,6 +21,12 @@ from utils import (
 )
 from alerts_store import read_alerts, write_alerts, append_alert
 
+RED = "\033[91m"
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+BLUE = "\033[94m"
+RESET = "\033[0m"
+
 alerts_bp = Blueprint("alerts", __name__)
 log = logging.getLogger(__name__)
 
@@ -280,7 +286,6 @@ def _process_falco_alert(payload, alerts_file):
                                         shell_killed = True
                                         alert_record["action_taken"] = f"shell '{proc_name}' (PID {pid}) killed"
                                         break
-
                         if not shell_killed:
                             alert_record["action_taken"] = f"shell '{proc_name}' not found in ps list"
                     else:
@@ -290,6 +295,7 @@ def _process_falco_alert(payload, alerts_file):
                     if not dry:
                         c.stop(timeout=stop_grace)
                         alert_record["action_taken"] = "auto-stopped container"
+                        log.info(f"{RED}[Falco] rule '{rule}' hit: killed shell in container {container_id} and container stopped{RESET}")
                     else:
                         alert_record["action_taken"] = "would-auto-stop container"
 
@@ -298,7 +304,7 @@ def _process_falco_alert(payload, alerts_file):
                 log.error("[Falco] Action failed for %s: %s", container_id, e)
 
         else:
-            log.info("[Falco] Rule '%s' not in auto-stop list: No shell action taken", rule)
+            log.info(f"{YELLOW}[Falco] Rule '{rule}' not in auto-stop list: No shell action taken{RESET}")
 
     except Exception as e:
         log.exception("[Falco] Async processing failed: %s", e)

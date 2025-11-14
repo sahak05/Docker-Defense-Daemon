@@ -14,6 +14,7 @@ falco:
     - "Write below etc"
     - "Read sensitive file"
     - "Read sensitive file untrusted"
+    - "Suspicious Download Tool In Container"
     - "Outbound connection from container"
     - "Package manager activity in container"
     - "Ptrace syscall used"
