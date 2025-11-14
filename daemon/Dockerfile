@@ -1,32 +1,4 @@
-# Stage 1: Build the UI
-FROM node:20-alpine AS ui-builder
-
-# Enable Corepack for Yarn
-RUN corepack enable
-
-WORKDIR /build
-
-# Copy package files for dependency installation
-COPY packages/ui/package.json ./packages/ui/
-COPY yarn.lock ./
-COPY packages/ui/tsconfig*.json ./packages/ui/
-COPY packages/ui/vite.config.ts ./packages/ui/
-COPY packages/ui/tailwind.config.js ./packages/ui/
-COPY postcss.config.js ./
-COPY packages/ui/index.html ./packages/ui/
-
-# Install dependencies
-WORKDIR /build/packages/ui
-RUN yarn install --frozen-lockfile
-
-# Copy UI source code
-COPY packages/ui/src ./src
-COPY packages/ui/public ./public
-
-# Build the UI
-RUN yarn build
-
-# Stage 2: Python backend with built UI
+# Runtime image (expects a prebuilt UI in `packages/ui/build` in the build context)
 FROM python:3.12-slim
 
 LABEL maintainer="INSE6130" \
@@ -49,10 +21,14 @@ RUN apt-get update && apt-get install -y curl ca-certificates tar && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy backend source code
+# Copy backend source code
 COPY daemon/ .
 
-# Copy built UI from the first stage
-COPY --from=ui-builder /build/packages/ui/build ./static
+# Copy prebuilt UI from the repository build output into the Flask static folder.
+# Team workflow: run `yarn build` in `packages/ui` (or pull committed build files) so
+# this directory exists in the build context. If you prefer the Dockerfile to build
+# the UI inside the image, we can restore a multi-stage build later.
+COPY packages/ui/build ./static
 
 # Optional non-root setup (commented out for now)
 # RUN useradd -m daemonuser

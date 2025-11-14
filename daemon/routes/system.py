@@ -14,6 +14,12 @@ from utils import (
     trivy_scan_image,
 )
 from events import get_events
+def _get_docker_client():
+    try:
+        client = docker.from_env()
+        return client
+    except Exception:
+        return None
 
 system_bp = Blueprint("system", __name__)
 log = logging.getLogger(__name__)
@@ -43,9 +49,12 @@ def daemon_status():
     alerts_count = 0
 
     try:
-        client = docker.from_env()
-        docker_info = client.version()
-        docker_ok = True
+        client = _get_docker_client()
+        if client:
+            docker_info = client.version()
+            docker_ok = True
+        else:
+            docker_info = {"error": "Docker client unavailable"}
     except Exception as e:
         docker_info = {"error": str(e)}
 
@@ -72,8 +81,8 @@ def daemon_status():
 @system_bp.route("/api/system-status", methods=["GET"])
 def system_status():
     try:
-        client = docker.from_env()
-        docker_info = client.version()
+        client = _get_docker_client()
+        docker_info = client.version() if client else {"error": "Docker client unavailable"}
 
         system_info = platform.system()
         release = platform.release()
@@ -136,16 +145,14 @@ def system_status():
 @system_bp.route("/api/docker-daemon", methods=["GET"])
 def docker_daemon_info():
     try:
-        client = docker.from_env()
-    except Exception as e:
-        logging.exception("Docker client not available")
-        msg = (
-            "Docker API not accessible from inside container. "
-            "Ensure /var/run/docker.sock is mounted into the container or set DOCKER_HOST."
-        )
-        return jsonify({"error": msg, "detail": str(e)}), 503
+        client = _get_docker_client()
+        if not client:
+            msg = (
+                "Docker API not accessible from inside container. "
+                "Ensure /var/run/docker.sock is mounted into the container or set DOCKER_HOST."
+            )
+            return jsonify({"error": msg, "detail": "client unavailable"}), 503
 
-    try:
         images = client.images.list()
         total_images = len(images)
         images_size = 0
@@ -198,10 +205,13 @@ def get_dashboard():
         alerts_list = []
 
         try:
-            client_instance = docker.from_env()
-            docker_info = client_instance.version()
-            docker_ok = True
-            containers_list = client_instance.containers.list(all=True)
+            client_instance = _get_docker_client()
+            if client_instance:
+                docker_info = client_instance.version()
+                docker_ok = True
+                containers_list = client_instance.containers.list(all=True)
+            else:
+                docker_info = {"error": "Docker client unavailable"}
         except Exception as e:
             logging.warning(f"Docker connection error: {e}")
             docker_info = {"error": str(e)}
@@ -279,13 +289,8 @@ def get_dashboard():
             alert = ensure_alert_has_id(alert)
             normalized_alerts.append(alert)
 
-        recent_activity = []
-        for i in range(3):
-            recent_activity.append({
-                "id": generate_unique_id(),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "message": f"Container activity recorded",
-            })
+        # Use actual daemon events instead of placeholders
+        recent_activity = get_events(limit=3)
 
         dashboard_data = {
             "success": True,

@@ -188,7 +188,10 @@ export function transformBackendAlerts(
       timestamp: alert.timestamp || alert.log_time || new Date().toISOString(),
       type: alert.type || "Alert",
       severity: "info",
-      container: alert.container || "unknown",
+      container:
+        typeof alert.container === "string"
+          ? alert.container
+          : alert.container?.name || alert.container?.id || "unknown",
       status: alert.status || "new",
       description: alert.description || JSON.stringify(alert).substring(0, 100),
       details: "Unable to parse alert details",
@@ -326,8 +329,16 @@ export async function acknowledgeAlert(alertId: string): Promise<{
       },
     });
     return response;
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Error acknowledging alert ${alertId}:`, error);
+    if (
+      error.message?.includes("404") ||
+      error.message?.includes("not found")
+    ) {
+      throw new Error(
+        "Alert not found. It may have been deleted or doesn't exist."
+      );
+    }
     throw error;
   }
 }
@@ -350,8 +361,16 @@ export async function resolveAlert(alertId: string): Promise<{
       },
     });
     return response;
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Error resolving alert ${alertId}:`, error);
+    if (
+      error.message?.includes("404") ||
+      error.message?.includes("not found")
+    ) {
+      throw new Error(
+        "Alert not found. It may have been deleted or doesn't exist."
+      );
+    }
     throw error;
   }
 }

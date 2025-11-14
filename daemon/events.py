@@ -23,6 +23,7 @@ ALERTS_FILE = "/app/alerts/alerts.jsonl"
 events_store = []
 events_lock = threading.Lock()
 MAX_EVENTS = 1000  # Keep last 1000 events
+EVENTS_FILE = "/app/alerts/events.jsonl"
 
 
 def add_event(event_type: str, message: str, container: Optional[str] = None, details: Optional[str] = None) -> None:
@@ -55,6 +56,14 @@ def add_event(event_type: str, message: str, container: Optional[str] = None, de
         # Keep only last MAX_EVENTS
         if len(events_store) > MAX_EVENTS:
             events_store = events_store[:MAX_EVENTS]
+    # Optional persistence for events ring buffer
+    try:
+        import os
+        os.makedirs(os.path.dirname(EVENTS_FILE), exist_ok=True)
+        with open(EVENTS_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(event) + "\n")
+    except Exception:
+        pass
 
 
 def get_events(limit: int = 100, event_type: Optional[str] = None, container: Optional[str] = None):
@@ -133,8 +142,17 @@ from utils import (
 )
 
 def docker_event_listener():
-    client = docker.from_env()
-    cfg = load_config()
+    try:
+        client = docker.from_env()
+    except Exception as e:
+        logging.error(f"Failed to connect to Docker daemon: {e}. Docker event listener will not run.")
+        return
+    
+    try:
+        cfg = load_config()
+    except Exception as e:
+        logging.error(f"Failed to load config: {e}")
+        cfg = {}
 
     for event in client.api.events(decode=True):
         try:

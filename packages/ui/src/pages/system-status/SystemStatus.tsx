@@ -110,18 +110,18 @@ export const SystemStatusPage: React.FC = () => {
       };
     }
 
-    const uptime = daemonInfo.uptime || 0;
+    const uptime = daemonInfo.uptime_seconds || 0;
     const days = Math.floor(uptime / 86400);
     const hours = Math.floor((uptime % 86400) / 3600);
     const minutes = Math.floor((uptime % 3600) / 60);
     const uptimeStr = `${days}d ${hours}h ${minutes}m`;
 
     return {
-      status: daemonInfo.docker_ok ? "running" : "error",
+      status: daemonInfo.docker_connected ? "running" : "error",
       uptime: uptimeStr,
-      version: daemonInfo.version || "N/A",
+      version: daemonInfo.docker_version || "N/A",
       pollingInterval: 5000,
-      lastCheck: daemonInfo.timestamp || new Date().toISOString(),
+      lastCheck: new Date().toISOString(),
     };
   }, [daemonInfo]);
 

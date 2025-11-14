@@ -135,12 +135,19 @@ export const AlertsCenter: React.FC = () => {
     setIsLoading(true);
     try {
       await acknowledgeAlert(selectedAlert.id);
-      toast.success("Alert acknowledged successfully");
+      toast.success("Alert acknowledged");
       setSelectedAlert(null);
       refetch(); // Refresh the alerts list
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to acknowledge alert:", error);
-      toast.error("Failed to acknowledge alert");
+      const errorMessage = error.message?.includes("not found")
+        ? "Alert not found. Refreshing list..."
+        : "Failed to acknowledge alert";
+      toast.error(errorMessage);
+      if (error.message?.includes("not found")) {
+        setSelectedAlert(null);
+        refetch(); // Refresh to remove stale alerts
+      }
     } finally {
       setIsLoading(false);
     }
@@ -155,9 +162,16 @@ export const AlertsCenter: React.FC = () => {
       toast.success("Alert marked as resolved");
       setSelectedAlert(null);
       refetch(); // Refresh the alerts list
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to resolve alert:", error);
-      toast.error("Failed to resolve alert");
+      const errorMessage = error.message?.includes("not found")
+        ? "Alert not found. Refreshing list..."
+        : "Failed to resolve alert";
+      toast.error(errorMessage);
+      if (error.message?.includes("not found")) {
+        setSelectedAlert(null);
+        refetch(); // Refresh to remove stale alerts
+      }
     } finally {
       setIsLoading(false);
     }

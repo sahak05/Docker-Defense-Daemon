@@ -1,0 +1,4 @@
+{"alert_id": "79bbd008-118f-46ba-9ab4-cbc2a3dae354", "original_id": "79bbd008-118f-46ba-9ab4-cbc2a3dae354", "action": "acknowledged", "timestamp": "2025-11-14T07:14:11.160570+00:00", "source": "api"}
+{"alert_id": "88a0d7f9-0b05-4419-98c5-98303a04c76f", "original_id": "88a0d7f9-0b05-4419-98c5-98303a04c76f", "action": "resolved", "timestamp": "2025-11-14T07:31:09.404185+00:00", "source": "api"}
+{"alert_id": "b36156e8-4224-468e-857e-6e6af75ab954", "original_id": "b36156e8-4224-468e-857e-6e6af75ab954", "action": "acknowledged", "timestamp": "2025-11-14T07:46:25.999060+00:00", "source": "api"}
+{"alert_id": "aca57cd8-f2d5-4564-9be1-03ec03150361", "original_id": "aca57cd8-f2d5-4564-9be1-03ec03150361", "action": "resolved", "timestamp": "2025-11-14T07:46:30.860434+00:00", "source": "api"}

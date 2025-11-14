@@ -1,0 +1,27 @@
+# Exclude VCS metadata
+.git
+
+# Python bytecode / caches
+__pycache__/
+*.pyc
+*.pyo
+
+# Node dependency trees (rebuild inside container only if needed)
+node_modules/
+packages/ui/node_modules/
+
+# Frontend source (we copy only the built assets now)
+packages/ui/src/
+packages/ui/public/
+packages/ui/.vite/
+packages/ui/coverage/
+
+# Docs (not needed in runtime image)
+docs/
+documentations/
+
+# Logs
+*.log
+
+# Keep the built UI (DO NOT ignore)
+# packages/ui/build/  <-- intentionally NOT ignored

@@ -2,24 +2,29 @@
 
 ## Quick ReadMe
 
-Application is served with Flask and Docker. The React UI is automatically built inside Docker using a multi-stage build process and served by the Flask backend.
+Application is served with Flask and Docker. The React UI is now built on the host and copied into the image (no Node in runtime). Docker Compose orchestrates the daemon and Falco.
 
-Docker-compose orchestrates multiple containers (daemon-defense + falco) which can be started with a single command.
+See the Quick Start guide for the exact commands and tips:
 
-### Run the docker compose file
+- Quick Start: ./QuickStart.md
 
-- **To run the app (builds UI automatically)** => `docker compose up -d --build`
-- To run without rebuilding => `docker compose up -d`
-- To stop it => `docker compose down`
+### Run with Docker Compose
 
-**Note:** The UI is now integrated into the Docker build. No separate `yarn build` command is needed! Access the full application at `http://localhost:8080`
+- Recommended: `docker compose up -d --build`
+- Without rebuild: `docker compose up -d`
+- Stop: `docker compose down`
+
+Notes:
+
+- UI is copied from `packages/ui/build` into `daemon/static`. If you change the UI, rebuild it locally first, then re-run compose with `--build`.
+- App: http://localhost:8080
 
 ### See the logs
 
 - See falco container logs => `docker compose logs -f falco`
 - See daemon container logs => `docker compose logs -f daemon-defense`
 
-### Testing connectivity from falco to daemon
+### Testing connectivity from Falco to daemon
 
 - Run a light container and open a shell, Falco has basic rule when it warns when a container spawns a shell => `docker run --rm -itd alpine sh`
 - You should see in the daemon log a JSOn line with the informations.
