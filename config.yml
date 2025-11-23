@@ -19,4 +19,5 @@ falco:
     - "Package manager activity in container"
     - "Ptrace syscall used"
     - "Root running unknown binary"
+    - "Outbound connection from container (refined)"
   stop_grace_seconds: 5
