@@ -20,4 +20,6 @@ falco:
     - "Ptrace syscall used"
     - "Root running unknown binary"
     - "Outbound connection from container (refined)"
-  stop_grace_seconds: 5
+    - "Read sensitive SSH file in container"
+    # - Drop and execute new binary in container
+  stop_grace_seconds: 2

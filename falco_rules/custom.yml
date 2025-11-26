@@ -7,12 +7,23 @@
   tags: [filesystem, mitre_persistence]
 
 - rule: Read sensitive file
-  desc: Someone is reading sensitive files like /etc/shadow or SSH keys
-  condition: container and evt.type = read and (fd.name contains /etc/shadow or fd.name contains /etc/passwd or fd.name contains /root/.ssh or fd.name contains /home/.*/.ssh)
+  desc: Detect deliberate reads of sensitive files by user commands
+  condition: >
+    evt.type in (open, openat) and
+    container.id != host and
+    proc.name in (cat, less, more, head, tail, grep, awk, sed) and
+    proc.tty != 0 and
+    (
+      fd.name = "/etc/shadow" or
+      fd.name = "/etc/passwd" or
+      fd.name pmatch ("/root/.ssh/*") or
+      fd.name pmatch ("/home/*/.ssh/*")
+    )
   output: >
-    Sensitive file read (command=%proc.cmdline file=%fd.name user=%user.name container=%container.name)
+    Sensitive file read (cmd=%proc.cmdline file=%fd.name user=%user.name container=%container.id)
   priority: WARNING
   tags: [filesystem, mitre_discovery]
+
 
 - rule: Suspicious Download Tool In Container
   desc: Detect execution of common download tools (curl/wget) inside containers fetching remote resources
@@ -46,3 +57,14 @@
     Ptrace syscall used (user=%user.name command=%proc.cmdline pid=%proc.pid container=%container.name)
   priority: ERROR
   tags: [syscall, mitre_defense_evasion]
+
+# - rule: Read sensitive SSH file in container
+#   desc: Detect reads of sensitive SSH-related files in user home directories inside containers
+#   condition: >
+#     evt.type in (open, openat, read) and
+#     fd.name startswith "/root/.ssh/" and
+#     container.id != host
+#   output: >
+#     [ALERT] SSH file read: %fd.name by %proc.name (%proc.cmdline) in container %container.id
+#   priority: CRITICAL
+#   tags: [ssh, container, falco, sensitive]
